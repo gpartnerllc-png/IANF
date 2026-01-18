@@ -923,66 +923,19 @@ function liberarUsuario(email) {
     </script>
 
         
- <script>
-
-    // GERAÇÃO DO DOCUMENTO
-    if (tipo === 'TERMICO') {
-        printArea.innerHTML = `
-            <div class="thermal-print-container" style="font-size: 12px; line-height: 1.2; width: 80mm; background: #fff; padding: 10px; color: #000; font-family: 'JetBrains Mono', monospace;">
-                <div style="border: 2px solid #000; font-size: 20px; text-align: center; font-weight: 900; margin-bottom: 5px;">SENTINELA V12</div>
-                <p style="text-align:center; font-size: 9px; margin-bottom: 5px;">SISTEMA DE GESTÃO E AUTORIDADE</p>
-                <p style="text-align:center;">------------------------------------------</p>
-                <p><b>DATA:</b> ${dataHora}</p>
-                <p><b>CLIENTE:</b> ${nome.toUpperCase()}</p>
-                <p><b>DOC:</b> ${doc}</p>
-                <p style="text-align:center;">------------------------------------------</p>
-                <table style="width: 100%; font-size: 10px;">
-                    <tr style="border-bottom: 1px solid #000;">
-                        <td align="left"><b>ITEM</b></td>
-                        <td align="center"><b>QTD</b></td>
-                        <td align="right"><b>TOTAL</b></td>
-                    </tr>
-                    ${desc.split('\n').filter(line => line.trim() !== "").map(line => {
-                        const partes = line.split('-');
-                        return `<tr>
-                            <td align="left">${(partes[0] || 'ITEM').trim()}</td>
-                            <td align="center">1</td>
-                            <td align="right">${(partes[1] || 'R$ ' + vTotal.toFixed(2)).trim()}</td>
-                        </tr>`;
-                    }).join('')}
-                </table>
-                <p style="text-align:center;">------------------------------------------</p>
-                <div style="text-align: right;">
-                    <p style="margin:0;">Subtotal: R$ ${vTotal.toFixed(2)}</p>
-                    <h2 style="margin: 0; font-size: 18px;">TOTAL: R$ ${vTotal.toFixed(2)}</h2>
-                </div>
-
-                <div style="margin-top: 10px; padding: 5px; border: 1px solid #000; background: #f9f9f9; font-size: 10px;">
-                    <p style="margin:0; font-weight:bold; text-align:center;">RESUMO FINANCEIRO DO TERMINAL</p>
-                    <p style="margin:0;">RECEITA ACUMULADA: R$ ${receitaAcumulada.toFixed(2)}</p>
-                    <p style="margin:0;">LUCRO LÍQUIDO DIA: R$ ${lucroAcumulado.toFixed(2)}</p>
-                </div>
-
-                <p style="font-size: 9px; margin-top: 5px;">Trib. aprox: R$ ${fed.toFixed(2)} (Fed) e R$ ${est.toFixed(2)} (Est)</p>
-                <p style="text-align:center; margin-top: 5px;"><b>AUTENTICAÇÃO HARDWARE</b><br>${ACCESS_KEY}</p>
-                <div style="text-align: center; margin-top: 5px; border: 1px dashed #000; padding: 5px; font-size: 10px;">[ QR CODE AUTORIDADE ]</div>
-            </div>`;
-    } else {
-        // VERSÃO A4 PREMIUM COM DRE INTEGRADO
-        printArea.innerHTML = `
+  printArea.innerHTML = `
             <div style="font-family: 'JetBrains Mono', monospace; padding: 40px; border: 1px solid #ddd; background: #fff; position: relative; width: 210mm; min-height: 297mm; margin: auto;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 4px solid #000; padding-bottom: 20px;">
                     <div>
                         <h1 style="font-size: 40px; margin: 0; font-weight: 900;">SENTINELA V12</h1>
                         <p style="margin: 0;">SISTEMAS DE AUTORIDADE</p>
-                        <p style="margin: 0; font-size: 12px;">SERIAL POS: ${SERIAL_P2}</p>
+                        <p style="margin: 0; font-size: 12px;">SERIAL POS: ${SP2}</p>
                     </div>
                     <div style="text-align: right; border: 2px solid #000; padding: 10px;">
                         <p style="margin: 0; font-size: 10px;">NÚMERO DO DOCUMENTO</p>
-                        <h2 style="margin: 0;">#${authCode}</h2>
+                        <h2 style="margin: 0;">#${Code}</h2>
                     </div>
                 </div>
-
                 <div style="margin-top: 30px; background: #f4f4f4; padding: 15px; border-radius: 5px; display: grid; grid-template-columns: 1fr 1fr;">
                     <div>
                         <p style="margin: 0; font-size: 10px; color: #666;">CLIENTE</p>
@@ -994,64 +947,222 @@ function liberarUsuario(email) {
                         <p style="margin: 0;">${dataHora}</p>
                     </div>
                 </div>
-
-                <table style="width: 100%; margin-top: 30px; border-collapse: collapse;">
-                    <thead>
-                        <tr style="background: #000; color: #fff;">
-                            <th align="left" style="padding: 10px;">CÓDIGO</th>
-                            <th align="left" style="padding: 10px;">DESCRIÇÃO</th>
-                            <th align="center" style="padding: 10px;">QTD</th>
-                            <th align="right" style="padding: 10px;">VALOR UN.</th>
-                            <th align="right" style="padding: 10px;">TOTAL</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${desc.split('\n').filter(line => line.trim() !== "").map((line, idx) => {
-                            const partes = line.split('-');
-                            return `
-                            <tr style="border-bottom: 1px solid #eee;">
-                                <td style="padding: 10px;">00${idx + 1}</td>
-                                <td style="padding: 10px;">${partes[0] || 'PRODUTO V12'}</td>
-                                <td align="center" style="padding: 10px;">1</td>
-                                <td align="right" style="padding: 10px;">${partes[1] || 'R$ ' + vTotal.toFixed(2)}</td>
-                                <td align="right" style="padding: 10px;">${partes[1] || 'R$ ' + vTotal.toFixed(2)}</td>
-                            </tr>`;
-                        }).join('')}
-                    </tbody>
-                </table>
-
                 <div style="margin-top: 40px; display: flex; justify-content: space-between; align-items: flex-end;">
                     <div style="width: 50%; border: 1px solid #000; padding: 15px; background: #f9f9f9;">
                         <h3 style="margin: 0 0 10px 0; font-size: 12px; border-bottom: 1px solid #000;">CONSOLIDAÇÃO DRE TERMINAL</h3>
                         <p style="margin: 2px 0; font-size: 11px;">RECEITA BRUTA DIA: R$ ${receitaAcumulada.toFixed(2)}</p>
-                        <p style="margin: 2px 0; font-size: 11px;">IMPOSTOS ACUMULADOS: R$ ${(receitaAcumulada * 0.2045).toFixed(2)}</p>
                         <p style="margin: 5px 0 0 0; font-size: 12px; font-weight: bold;">LUCRO LÍQUIDO: R$ ${lucroAcumulado.toFixed(2)}</p>
                     </div>
                     <div style="width: 300px; background: #000; color: #fff; padding: 20px; text-align: right;">
-                        <p style="margin: 0; font-size: 12px;">SUBTOTAL: R$ ${vTotal.toFixed(2)}</p>
-                        <p style="margin: 0; font-size: 12px;">TRIBUTOS DA VENDA: R$ ${totalImpostosVenda.toFixed(2)}</p>
-                        <h2 style="margin: 0; font-size: 24px; border-top: 1px solid #fff; margin-top: 10px; padding-top: 10px;">R$ ${vTotal.toFixed(2)}</h2>
+                        <h2 style="margin: 0; font-size: 24px;">TOTAL R$ ${vTotal.toFixed(2)}</h2>
                     </div>
-                </div>
-
-                <div style="margin-top: 80px; display: flex; justify-content: space-between;">
-                    <div style="width: 45%; text-align: center;">
-                        <div style="border-top: 2px solid #000; margin-bottom: 5px;"></div>
-                        <p style="font-size: 10px;"><b>ASSINATURA DO CLIENTE</b></p>
-                    </div>
-                    <div style="width: 45%; text-align: center;">
-                        <div style="border-top: 2px solid #000; margin-bottom: 5px;"></div>
-                        <p style="font-size: 10px;"><b>SENTINELA DATA SYSTEMS</b></p>
-                    </div>
-                </div>
-
-                <div style="position: absolute; bottom: 20px; left: 40px; font-size: 8px; color: #999;">
-                    AUTENTICIDADE: ${ACCESS_KEY}-${authCode} | ACUMULADO DRE ATUALIZADO NO ATO
                 </div>
             </div>`;
     }
 
- </script>
+    // 4. GERAÇÃO DO DOCUMENTO (O seu código com as variáveis corrigidas)
+    if (tipo === 'TERMICO') {
+        printArea.innerHTML = `
+            <div class="thermal-print-container" style="font-size: 12px; line-height: 1.2; width: 80mm; background: #fff; padding: 10px; color: #000; font-family: 'JetBrains Mono', monospace;">
+                <div style="border: 2px solid #000; font-size: 20px; text-align: center; font-weight: 900; margin-bottom: 5px;">Gestão Acertiva</div>
+                <p style="text-align:center; font-size: 9px; margin-bottom: 5px;">SISTEMA DE GESTÃO</p>
+                <p style="text-align:center;">------------------------------------------</p>
+                <p><b>DATA:</b> ${dataHora}</p>
+                <p><b>CLIENTE:</b> ${nome.toUpperCase()}</p>
+                <p><b>DOC:</b> ${doc}</p>
+                <p style="text-align:center;">------------------------------------------</p>
+                <table style="width: 100%; font-size: 10px;">
+                    <tr style="border-bottom: 1px solid #000;">
+                        <td align="left"><b>ITEM</b></td>
+                        <td align="center"><b>QTD</b></td>
+                        <td align="right"><b>TOTAL</b></td>
+                    </tr>
+                    <tr>
+                        <td align="left">${desc.substring(0, 15)}...</td>
+                        <td align="center">1</td>
+                        <td align="right">R$ ${vTotal.toFixed(2)}</td>
+                    </tr>
+                </table>
+                <p style="text-align:center;">------------------------------------------</p>
+                <div style="text-align: right;">
+                    <p style="margin:0;">Subtotal: R$ ${vTotal.toFixed(2)}</p>
+                    <h2 style="margin: 0; font-size: 18px;">TOTAL: R$ ${vTotal.toFixed(2)}</h2>
+                </div>
+                <div style="margin-top: 10px; padding: 5px; border: 1px solid #000; background: #f9f9f9; font-size: 10px;">
+                    <p style="margin:0; font-weight:bold; text-align:center;">RESUMO FINANCEIRO DO TERMINAL</p>
+                    <p style="margin:0;">RECEITA ACUMULADA: R$ ${receitaAcumulada.toFixed(2)}</p>
+                    <p style="margin:0;">LUCRO LÍQUIDO DIA: R$ ${lucroAcumulado.toFixed(2)}</p>
+                </div>
+                <p style="font-size: 9px; margin-top: 5px;">Trib. aprox: R$ ${fed.toFixed(2)} (Fed) e R$ ${est.toFixed(2)} (Est)</p>
+                <p style="text-align:center; margin-top: 5px;"><b>AUTENTICAÇÃO HARDWARE</b><br>${ACCESS_KEY}</p>
+            </div>`;
+ } else {
+        </script>
+                
+        <script>
+
+
+
+
+
+
+
+
+
+
+
+<script>
+    function emitir(tipo) {
+        // 1. CAPTURA DE DADOS COM VALIDAÇÃO DE AUTORIDADE
+        const nome = document.getElementById('nomeInput').value.trim();
+        const valorRaw = document.getElementById('valorInput').value;
+        const valor = parseFloat(valorRaw) || 0;
+        const desc = document.getElementById('descInput').value || "Transação D.IA";
+        
+        // 2. BLOQUEIO DE ERRO (SEGURANÇA)
+        if (!nome || valor <= 0) {
+            return alert("❌ ERRO V12: Preencha o Nome e um Valor válido para emissão.");
+        }
+
+        const printArea = document.getElementById('print-area');
+        const dataHora = new Date().toLocaleString('pt-BR');
+        
+        // 3. FORMATAÇÃO DE MOEDA REAL (R$)
+        const valorFormatado = valor.toLocaleString('pt-BR', { 
+            style: 'currency', 
+            currency: 'BRL' 
+        });
+
+        // 4. CONSTRUÇÃO DO COMPROVANTE (DESIGN DE ALTA CONVERSÃO)
+        // Aqui o sistema gera o HTML que será impresso ou visualizado
+        printArea.innerHTML = `
+            <div style="background: #fff; color: #000; padding: 25px; border-radius: 15px; border-left: 8px solid #ff8c00; font-family: sans-serif; max-width: 350px; margin: 20px auto; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px;">
+                    <span style="font-weight: bold; color: #ff8c00;">COMPROVANTE FINNO PAY</span>
+                    <span style="font-size: 0.7rem; color: #666;">${tipo.toUpperCase()}</span>
+                </div>
+                
+                <p style="font-size: 0.8rem; margin: 5px 0;"><strong>CLIENTE:</strong> ${nome}</p>
+                <p style="font-size: 1.5rem; margin: 15px 0; font-weight: 900; color: #000;">${valorFormatado}</p>
+                <p style="font-size: 0.8rem; margin: 5px 0;"><strong>DESCRIÇÃO:</strong> ${desc}</p>
+                
+                <div style="margin-top: 20px; font-size: 0.65rem; color: #999; border-top: 1px dashed #ccc; padding-top: 10px;">
+                    DATA/HORA: ${dataHora}<br>
+                    AUTORIDADE: FINNO PAY ACTIVE
+                </div>
+            </div>
+        `;
+
+        // 5. AUTO-SCROLL PARA O COMPROVANTE  FINNO PAY
+        printArea.scrollIntoView({ behavior: 'smooth' });
+        
+        console.log(`[V12 LOG] Comprovante emitido para ${nome} no valor de ${valorFormatado}`);
+    }
+</script>
+
+
+
+PARA O PIX PARCELADO:
+<script>
+async function finalizarAgoraV12() {
+    const btn = document.querySelector('button');
+    btn.innerText = "IA PROCESSANDO...";
+
+    const dadosReal = {
+        cpf: document.getElementById('cpf').value,
+        cep: document.getElementById('cep').value,
+        valor: "12450.00", // Valor real do sistema
+        nome: "CLIENTE V12"
+    };
+
+    try {
+        const response = await fetch('https://mxkyrbqcwpcoqkhshtqjrfonvu0dwchv.lambda-url.sa-east-1.on.aws/', {
+            method: 'POST',
+            body: JSON.stringify(dadosReal)
+        });
+
+        const res = await response.json();
+        
+        // Se a ponte com a Pagaleve funcionar, ele redireciona sozinho
+        if (res.url) {
+            window.location.href = res.url;
+        } else {
+            alert("Erro na geração do Link Real.");
+        }
+    } catch (err) {
+        console.error("Erro de Conexão:", err);
+    }
+}
+</script>
+
+
+
+<script>
+        async function enviarParaV12() {
+            const status = document.getElementById('status');
+            const cpf = document.getElementById('cpf').value;
+            const cep = document.getElementById('cep').value;
+
+            if(cpf.length < 14) { alert("CPF incompleto"); return; }
+
+            status.innerText = "⚡ DROPPFY IA: PROCESSANDO NA REDE...";
+            
+            try {
+                // Link oficial da sua Lambda (visto no print image_970b0b.png)
+                const URL_LAMBDA = 'https://4djefisdvvgqv4jl3j5x35mssi0vxfmv.lambda-url.sa-east-1.on.aws/';
+                
+                const response = await fetch(URL_LAMBDA, {
+                    method: 'POST',
+                    mode: 'no-cors', // Importante para evitar erro de conexão simples
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cpf, cep, token: "01KF10NWVS30NQGHEJ99SFSBCS" })
+                });
+
+                status.innerText = "✅ SOLICITAÇÃO ENVIADA COM SUCESSO!";
+                setTimeout(() => {
+                    window.location.href = "https://loja.infinitepay.io/droppfy";
+                }, 1500);
+
+            } catch (err) {
+                status.innerText = "❌ ERRO DE CONEXÃO. VERIFIQUE A LAMBDA.";
+                console.error(err);
+            }
+        }
+    </script>
+
+
+
+
+
+Emitir Not Comando.
+
+  <script>
+        function emitir(tipo) {
+    const vTotal = parseFloat(document.getElementById('valorInput').value) || 0;
+    const slot = document.getElementById('slotDestino').value;
+
+    if (vTotal <= 0) return alert("ERRO: Valor de autoridade não definido.");
+
+    // Garante que a estrutura detalhada existe
+    if (!v12_finance.detalhado) v12_finance.detalhado = {};
+
+    // DIRECCIONAMENTO
+    if (slot.startsWith('receita')) {
+        v12_finance.receita += vTotal;
+    } else {
+        v12_finance.despesa += vTotal;
+        // Alimenta o slot específico (ex: obras)
+        v12_finance.detalhado[slot] = (v12_finance.detalhado[slot] || 0) + vTotal;
+    }
+
+    // Persistência
+    salvarTudoV12();
+    if (typeof updateDRE === "function") updateDRE();
+
+    // Com o slot definido, a nota fiscal agora sai detalhada
+    gerarNotaV12(tipo, vTotal, slot);
+}
+    <script>
     // 5. COMANDOS DE FINALIZAÇÃO
     salvarEAtualizarV12(); // Salva no banco
     updateDRE();           // Atualiza o painel na tela
