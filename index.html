@@ -534,69 +534,8 @@ let v12_users = JSON.parse(localStorage.getItem('v12_database')) || [
         }
     </script>
 
-    <script>
-        // --- 5. EMITIR (DANFE PREMIUM) ---
-        function emitir(tipo) {
-            const nome = document.getElementById('nomeInput').value;
-            const valor = parseFloat(document.getElementById('valorInput').value) || 0;
-            const desc = document.getElementById('descInput').value;
-            const printArea = document.getElementById('print-area');
-            const dataHora = new Date().toLocaleString('pt-BR');
-       }
-    <script>
-
-   
-// 4. LÓGICA DE GERAÇÃO POR TIPO
-function gerarImpressao(dados) {
-    const { tipo, nome, doc, dataHora, vTotal, desc, receitaAcumulada, lucroAcumulado, fed, est, ACCESS_KEY, SP2, Code } = dados;
-    const printArea = document.getElementById('printArea');
-
-    if (tipo === 'TERMICO') {
-        printArea.innerHTML = `
-            <div class="thermal-print-container" style="font-size: 12px; line-height: 1.2; width: 80mm; background: #fff; padding: 10px; color: #000; font-family: 'JetBrains Mono', monospace;">
-                <div style="border: 2px solid #000; font-size: 20px; text-align: center; font-weight: 900; margin-bottom: 5px;">Gestão Acertiva</div>
-                <p style="text-align:center; font-size: 9px; margin-bottom: 5px;">SISTEMA DE GESTÃO</p>
-                <p style="text-align:center;">------------------------------------------</p>
-                <p><b>DATA:</b> ${dataHora}</p>
-                <p><b>CLIENTE:</b> ${nome.toUpperCase()}</p>
-                <p><b>DOC:</b> ${doc}</p>
-                <p style="text-align:center;">------------------------------------------</p>
-                <table style="width: 100%; font-size: 10px;">
-                    <tr style="border-bottom: 1px solid #000;">
-                        <td align="left"><b>ITEM</b></td>
-                        <td align="center"><b>QTD</b></td>
-                        <td align="right"><b>TOTAL</b></td>
-                    </tr>
-                    <tr>
-                        <td align="left">${desc.substring(0, 15)}...</td>
-                        <td align="center">1</td>
-                        <td align="right">R$ ${vTotal.toFixed(2)}</td>
-                    </tr>
-                </table>
-                <p style="text-align:center;">------------------------------------------</p>
-                <div style="text-align: right;">
-                    <p style="margin:0;">Subtotal: R$ ${vTotal.toFixed(2)}</p>
-                    <h2 style="margin: 0; font-size: 18px;">TOTAL: R$ ${vTotal.toFixed(2)}</h2>
-                </div>
-                <div style="margin-top: 10px; padding: 5px; border: 1px solid #000; background: #f9f9f9; font-size: 10px;">
-                    <p style="margin:0; font-weight:bold; text-align:center;">RESUMO FINANCEIRO DO TERMINAL</p>
-                    <p style="margin:0;">RECEITA ACUMULADA: R$ ${receitaAcumulada.toFixed(2)}</p>
-                    <p style="margin:0;">LUCRO LÍQUIDO DIA: R$ ${lucroAcumulado.toFixed(2)}</p>
-                </div>
-                <p style="font-size: 9px; margin-top: 5px;">Trib. aprox: R$ ${fed.toFixed(2)} (Fed) e R$ ${est.toFixed(2)} (Est)</p>
-                <p style="text-align:center; margin-top: 5px;"><b>AUTENTICAÇÃO HARDWARE</b><br>${ACCESS_KEY}</p>
-            </div>`;
-           
-   
-    <script>
-
-    // Feedback e comando de impressão
-    setTimeout(() => {
-        window.print();
-    }, 500);
-}
-
-
+<script>
+    
     async function processarVenda() {
     const status = document.getElementById('status');
     status.innerText = "🚀 PROCESSANDO DADOS V12...";
@@ -881,31 +820,7 @@ function liberarUsuario(email) {
         }
     </script>
 
-    <script>
-        
-        function emitir(tipo) {
-            const nome = document.getElementById('nomeInput').value;
-            const valor = parseFloat(document.getElementById('valorInput').value) || 0;
-            const desc = document.getElementById('descInput').value;
-            if(!nome || valor <= 0) return alert("Erro: Preencha Nome e Valor.");
-            
-            const printArea = document.getElementById('print-area');
-            const dataHora = new Date().toLocaleString('pt-BR');
-    </script>
-
-    <script>
-        
-            function emitir(tipo) {
-    // 1. CAPTURA DOS DADOS DO DOM
-    const nome = document.getElementById('nomeInput').value;
-    const doc = document.getElementById('docInput').value || "000.000.000-00";
-    const valorInput = document.getElementById('valorInput').value;
-    const desc = document.getElementById('descInput').value || "PRODUTO V12 - R$ 0,00";
-    const printArea = document.getElementById('print-area');
-
-                </script>
-
-    <script>
+     <script>
         
     // 2. VALIDAÇÃO BÁSICA
     if (!nome || !valorInput) {
@@ -941,45 +856,11 @@ function liberarUsuario(email) {
         document.getElementById('lucro-display').style.color = lucroLiquido >= 0 ? "#10b981" : "#ef4444";
     }
 
-    </script>
-
-    <script>
-        
     // 3. Log de Auditoria Financeira
     console.log(`[DRE V12] Sincronizado: Receita R$ ${receitaTotal.toFixed(2)} | Lucro R$ ${lucroLiquido.toFixed(2)}`);
 }
 
-    </script>
-
-    <script>
-                function updateDRE() {
-    // 1. Cálculos de base
-    const receitaTotal = v12_finance.receita;
-    const totalImpostos = receitaTotal * 0.01; // CBS (0.9%) + IBS (0.1%)
-    const lucroLiquido = receitaTotal - totalImpostos;
-                    
-    // 3. PROCESSAMENTO FINANCEIRO E TRIBUTÁRIO
-    const vTotal = parseFloat(valorInput) || 0;
-    const fed = vTotal * 0.1345; // Exemplo de carga federal (13.45%)
-    const est = vTotal * 0.07;   // Exemplo de carga estadual (7%)
-    const totalImpostos = fed + est;
-    const authCode = Math.floor(100000 + Math.random() * 900000); // Código de documento único
-    const dataHora = new Date().toLocaleString('pt-BR');
-
-    // 4. LÓGICA DE GERAÇÃO DO DOCUMENTO
-    function emitir(tipo) {
-    // CAPTURA E VALIDAÇÃO
-    const nome = document.getElementById('nomeInput').value;
-    const valorInput = document.getElementById('valorInput').value;
-    const doc = document.getElementById('docInput').value || "000.000.000-00";
-    const desc = document.getElementById('descInput').value || "PRODUTO V12 - R$ 0,00";
-    const printArea = document.getElementById('print-area');
     
-    if (!nome || !valorInput) {
-        alert("Erro: Preencha o Nome e o Valor Operacional.");
-        return;
-    }
-
     // PROCESSAMENTO FINANCEIRO V12
     const vTotal = parseFloat(valorInput) || 0;
     const fed = vTotal * 0.1345; 
@@ -996,31 +877,6 @@ function liberarUsuario(email) {
     // ATUALIZA INTERFACE VISUAL
     updateDRE();
         
- </script>
-
-    <script>
-        function emitir(tipo) {
-    // 1. CAPTURA DOS INPUTS
-    const nome = document.getElementById('nomeInput')?.value || "CLIENTE V12";
-    const valorRaw = document.getElementById('valorInput')?.value || "0";
-    const doc = document.getElementById('docInput')?.value || "000.000.000-00";
-    const desc = document.getElementById('descInput')?.value || "PRODUTO V12";
-    const printArea = document.getElementById('print-area');
-
-    </script>
-    
-    <script>
-
-    // 2. CÁLCULOS NECESSÁRIOS (O que estava faltando)
-    const vTotal = parseFloat(valorRaw) || 0;
-    if (vTotal <= 0) {
-        alert("ALERTA: Insira um valor válido para emitir.");
-        return;
-    }
-    </script>
-
-        <script>
-
     const dataHora = new Date().toLocaleString('pt-BR');
     const fed = vTotal * 0.1345; // Imposto Federal
     const est = vTotal * 0.07;   // Imposto Estadual
@@ -1038,8 +894,9 @@ function liberarUsuario(email) {
 
     </script>
 
-        
+    <scrpt>    
   printArea.innerHTML = `
+        
             <div style="font-family: 'JetBrains Mono', monospace; padding: 40px; border: 1px solid #ddd; background: #fff; position: relative; width: 210mm; min-height: 297mm; margin: auto;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 4px solid #000; padding-bottom: 20px;">
                     <div>
@@ -1074,111 +931,8 @@ function liberarUsuario(email) {
                     </div>
                 </div>
             </div>`;
-    }
+    }  
 
-    // 4. GERAÇÃO DO DOCUMENTO (O seu código com as variáveis corrigidas)
-    if (tipo === 'TERMICO') {
-        printArea.innerHTML = `
-            <div class="thermal-print-container" style="font-size: 12px; line-height: 1.2; width: 80mm; background: #fff; padding: 10px; color: #000; font-family: 'JetBrains Mono', monospace;">
-                <div style="border: 2px solid #000; font-size: 20px; text-align: center; font-weight: 900; margin-bottom: 5px;">Gestão Acertiva</div>
-                <p style="text-align:center; font-size: 9px; margin-bottom: 5px;">SISTEMA DE GESTÃO</p>
-                <p style="text-align:center;">------------------------------------------</p>
-                <p><b>DATA:</b> ${dataHora}</p>
-                <p><b>CLIENTE:</b> ${nome.toUpperCase()}</p>
-                <p><b>DOC:</b> ${doc}</p>
-                <p style="text-align:center;">------------------------------------------</p>
-                <table style="width: 100%; font-size: 10px;">
-                    <tr style="border-bottom: 1px solid #000;">
-                        <td align="left"><b>ITEM</b></td>
-                        <td align="center"><b>QTD</b></td>
-                        <td align="right"><b>TOTAL</b></td>
-                    </tr>
-                    <tr>
-                        <td align="left">${desc.substring(0, 15)}...</td>
-                        <td align="center">1</td>
-                        <td align="right">R$ ${vTotal.toFixed(2)}</td>
-                    </tr>
-                </table>
-                <p style="text-align:center;">------------------------------------------</p>
-                <div style="text-align: right;">
-                    <p style="margin:0;">Subtotal: R$ ${vTotal.toFixed(2)}</p>
-                    <h2 style="margin: 0; font-size: 18px;">TOTAL: R$ ${vTotal.toFixed(2)}</h2>
-                </div>
-                <div style="margin-top: 10px; padding: 5px; border: 1px solid #000; background: #f9f9f9; font-size: 10px;">
-                    <p style="margin:0; font-weight:bold; text-align:center;">RESUMO FINANCEIRO DO TERMINAL</p>
-                    <p style="margin:0;">RECEITA ACUMULADA: R$ ${receitaAcumulada.toFixed(2)}</p>
-                    <p style="margin:0;">LUCRO LÍQUIDO DIA: R$ ${lucroAcumulado.toFixed(2)}</p>
-                </div>
-                <p style="font-size: 9px; margin-top: 5px;">Trib. aprox: R$ ${fed.toFixed(2)} (Fed) e R$ ${est.toFixed(2)} (Est)</p>
-                <p style="text-align:center; margin-top: 5px;"><b>AUTENTICAÇÃO HARDWARE</b><br>${ACCESS_KEY}</p>
-            </div>`;
- } else {
-        </script>
-                
-        <script>
-
-
-
-
-
-
-
-
-
-
-
-<script>
-    function emitir(tipo) {
-        // 1. CAPTURA DE DADOS COM VALIDAÇÃO DE AUTORIDADE
-        const nome = document.getElementById('nomeInput').value.trim();
-        const valorRaw = document.getElementById('valorInput').value;
-        const valor = parseFloat(valorRaw) || 0;
-        const desc = document.getElementById('descInput').value || "Transação D.IA";
-        
-        // 2. BLOQUEIO DE ERRO (SEGURANÇA)
-        if (!nome || valor <= 0) {
-            return alert("❌ ERRO V12: Preencha o Nome e um Valor válido para emissão.");
-        }
-
-        const printArea = document.getElementById('print-area');
-        const dataHora = new Date().toLocaleString('pt-BR');
-        
-        // 3. FORMATAÇÃO DE MOEDA REAL (R$)
-        const valorFormatado = valor.toLocaleString('pt-BR', { 
-            style: 'currency', 
-            currency: 'BRL' 
-        });
-
-        // 4. CONSTRUÇÃO DO COMPROVANTE (DESIGN DE ALTA CONVERSÃO)
-        // Aqui o sistema gera o HTML que será impresso ou visualizado
-        printArea.innerHTML = `
-            <div style="background: #fff; color: #000; padding: 25px; border-radius: 15px; border-left: 8px solid #ff8c00; font-family: sans-serif; max-width: 350px; margin: 20px auto; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px;">
-                    <span style="font-weight: bold; color: #ff8c00;">COMPROVANTE FINNO PAY</span>
-                    <span style="font-size: 0.7rem; color: #666;">${tipo.toUpperCase()}</span>
-                </div>
-                
-                <p style="font-size: 0.8rem; margin: 5px 0;"><strong>CLIENTE:</strong> ${nome}</p>
-                <p style="font-size: 1.5rem; margin: 15px 0; font-weight: 900; color: #000;">${valorFormatado}</p>
-                <p style="font-size: 0.8rem; margin: 5px 0;"><strong>DESCRIÇÃO:</strong> ${desc}</p>
-                
-                <div style="margin-top: 20px; font-size: 0.65rem; color: #999; border-top: 1px dashed #ccc; padding-top: 10px;">
-                    DATA/HORA: ${dataHora}<br>
-                    AUTORIDADE: FINNO PAY ACTIVE
-                </div>
-            </div>
-        `;
-
-        // 5. AUTO-SCROLL PARA O COMPROVANTE  FINNO PAY
-        printArea.scrollIntoView({ behavior: 'smooth' });
-        
-        console.log(`[V12 LOG] Comprovante emitido para ${nome} no valor de ${valorFormatado}`);
-    }
-</script>
-
-
-
-PARA O PIX PARCELADO:
 <script>
 async function finalizarAgoraV12() {
     const btn = document.querySelector('button');
@@ -1249,8 +1003,6 @@ async function finalizarAgoraV12() {
 
 
 
-
-Emitir Not Comando.
 
   <script>
         function emitir(tipo) {
