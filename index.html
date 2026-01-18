@@ -11,6 +11,24 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono&display=swap" rel="stylesheet">
     
     <style>
+@media print {
+    /* Esconde tudo o que não for a área da nota */
+    body * {
+        visibility: hidden;
+    }
+    /* Mostra apenas a área de impressão e seus filhos */
+    #printArea, #printArea * {
+        visibility: visible;
+    }
+    #printArea {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+    }
+}
+
+        
         :root { 
             --active-orange: #ff6b00; 
             --deep-orange: #e65f00;
@@ -340,6 +358,8 @@
         </main>
     </div>
 
+     
+
     <div id="print-area" class="hidden"></div>
 
     
@@ -523,8 +543,104 @@ let v12_users = JSON.parse(localStorage.getItem('v12_database')) || [
             const printArea = document.getElementById('print-area');
             const dataHora = new Date().toLocaleString('pt-BR');
        }
-    </script>
+    <script>
 
+   
+// 4. LÓGICA DE GERAÇÃO POR TIPO
+function gerarImpressao(dados) {
+    const { tipo, nome, doc, dataHora, vTotal, desc, receitaAcumulada, lucroAcumulado, fed, est, ACCESS_KEY, SP2, Code } = dados;
+    const printArea = document.getElementById('printArea');
+
+    if (tipo === 'TERMICO') {
+        printArea.innerHTML = `
+            <div class="thermal-print-container" style="font-size: 12px; line-height: 1.2; width: 80mm; background: #fff; padding: 10px; color: #000; font-family: 'JetBrains Mono', monospace;">
+                <div style="border: 2px solid #000; font-size: 20px; text-align: center; font-weight: 900; margin-bottom: 5px;">Gestão Acertiva</div>
+                <p style="text-align:center; font-size: 9px; margin-bottom: 5px;">SISTEMA DE GESTÃO</p>
+                <p style="text-align:center;">------------------------------------------</p>
+                <p><b>DATA:</b> ${dataHora}</p>
+                <p><b>CLIENTE:</b> ${nome.toUpperCase()}</p>
+                <p><b>DOC:</b> ${doc}</p>
+                <p style="text-align:center;">------------------------------------------</p>
+                <table style="width: 100%; font-size: 10px;">
+                    <tr style="border-bottom: 1px solid #000;">
+                        <td align="left"><b>ITEM</b></td>
+                        <td align="center"><b>QTD</b></td>
+                        <td align="right"><b>TOTAL</b></td>
+                    </tr>
+                    <tr>
+                        <td align="left">${desc.substring(0, 15)}...</td>
+                        <td align="center">1</td>
+                        <td align="right">R$ ${vTotal.toFixed(2)}</td>
+                    </tr>
+                </table>
+                <p style="text-align:center;">------------------------------------------</p>
+                <div style="text-align: right;">
+                    <p style="margin:0;">Subtotal: R$ ${vTotal.toFixed(2)}</p>
+                    <h2 style="margin: 0; font-size: 18px;">TOTAL: R$ ${vTotal.toFixed(2)}</h2>
+                </div>
+                <div style="margin-top: 10px; padding: 5px; border: 1px solid #000; background: #f9f9f9; font-size: 10px;">
+                    <p style="margin:0; font-weight:bold; text-align:center;">RESUMO FINANCEIRO DO TERMINAL</p>
+                    <p style="margin:0;">RECEITA ACUMULADA: R$ ${receitaAcumulada.toFixed(2)}</p>
+                    <p style="margin:0;">LUCRO LÍQUIDO DIA: R$ ${lucroAcumulado.toFixed(2)}</p>
+                </div>
+                <p style="font-size: 9px; margin-top: 5px;">Trib. aprox: R$ ${fed.toFixed(2)} (Fed) e R$ ${est.toFixed(2)} (Est)</p>
+                <p style="text-align:center; margin-top: 5px;"><b>AUTENTICAÇÃO HARDWARE</b><br>${ACCESS_KEY}</p>
+            </div>`;
+           
+   
+    <script>
+
+    // Feedback e comando de impressão
+    setTimeout(() => {
+        window.print();
+    }, 500);
+}
+
+
+    async function processarVenda() {
+    const status = document.getElementById('status');
+    status.innerText = "🚀 PROCESSANDO DADOS V12...";
+
+    try {
+        const response = await fetch(ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                cpf: document.getElementById('cpf').value,
+                v12_auth: "20260112PB1F252F75254" 
+            })
+        });
+
+        const retorno = await response.json(); // Aqui pegamos os dados da AWS
+
+        if (retorno.success || retorno.checkoutUrl) {
+            status.innerText = "✅ DADOS RECEBIDOS! GERANDO NOTA...";
+            
+            // ESTA É A PARTE QUE FALTA: Enviar os dados para a nota
+            gerarImpressao({
+                tipo: 'A4', // ou 'TERMICO'
+                nome: retorno.nome || "Cliente V12",
+                doc: retorno.cpf || "000.000.000-00",
+                dataHora: new Date().toLocaleString(),
+                vTotal: parseFloat(retorno.valor) || 0,
+                desc: "AUTORIZAÇÃO DE PAGAMENTO V12",
+                receitaAcumulada: retorno.receita || 0,
+                lucroAcumulado: retorno.lucro || 0,
+                fed: retorno.impostoFed || 0,
+                est: retorno.impostoEst || 0,
+                ACCESS_KEY: "V12-AUTH-PROD",
+                SP2: "SENTINELA-XP8",
+                Code: Math.floor(Math.random() * 100000)
+            });
+        }
+    } catch (err) {
+        status.innerText = "❌ ERRO AO CONECTAR COM NÚCLEO.";
+        console.error(err);
+    }
+}
+
+    </script>
+    
     <script>
        // 6. REMOVER USUÁRIO COM LOG DE AUDITORIA
 function removerUsuarioV12(email) {
