@@ -232,22 +232,26 @@
     </div>
 
     <div class="flex flex-col gap-2">
-        <label class="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2">Destinar Fluxo</label>
+        
+        <label class="text-[11px] font-White text-slate-100 uppercase tracking-[0.2em] ml-2">Destinar Fluxo</label>
+        
         <select id="slotDestino" 
+            
                 class="w-full bg-slate-900 p-4 rounded-2xl text-white font-medium
-                       shadow-[6px_6px_12px_#070a11,-6px_-6px_12px_#111827] 
-                       border border-slate-800 outline-none focus:border-orange-500 appearance-none cursor-pointer">
-            <optgroup label="📥 ENTRADAS (RECEITAS)" class="bg-slate-900 text-orange-500">
+                       shadow-[2px_3px_6px_#070a11,-3px_-3px_6px_#111827] 
+                       border border-slate-200 outline-none focus:border-orange-100 appearance-none cursor-pointer">
+            
+            <optgroup label="📥 ENTRADAS (RECEITAS)" class="bg-slate-600 text-orange-400">
                 <option value="receita_pix">📥 RECEBIMENTO PIX</option>
                 <option value="receita_cartao">📥 RECEBIMENTO CARTÃO</option>
             </optgroup>
-            <optgroup label="🏗️ ESTRUTURA E EXPANSÃO" class="bg-slate-900 text-slate-400">
+            <optgroup label="🏗️ ESTRUTURA E EXPANSÃO" class="bg-slate-600 text-slate-400">
                 <option value="obras">🏗️ OBRAS E REFORMA</option>
                 <option value="energia">⚡ ENERGIA / CONDOMÍNIO</option>
                 <option value="manutencao">🛠️ MANUTENÇÃO / EQUIPAMENTOS</option>
                 <option value="equipamentos">🛒 COMPRA DE EQUIPAMENTOS</option>
             </optgroup>
-            <optgroup label="👥 OPERACIONAL / PESSOAL" class="bg-slate-900 text-slate-400">
+            <optgroup label="👥 OPERACIONAL / PESSOAL" class="bg-slate-600 text-slate-400">
                 <option value="pro_labore">👤 PRO-LABORE (RETIRADA)</option>
                 <option value="func">👥 PAGAMENTO FUNCIONÁRIOS</option>
                 <option value="taxas">💸 TAXAS / IMPOSTOS</option>
@@ -257,8 +261,8 @@
     </div>
 
     <button onclick="emitir('A4')" 
-            class="group relative mt-2 overflow-hidden bg-orange-600 p-4 rounded-2xl font-white text-black uppercase tracking-widest
-                   shadow-[6px_6px_12px_#EDF1FE,-2px_-2px_7px_rgba(134,48,12,0.5)]
+            class="group relative mt-2 overflow-hidden bg-orange-200 p-4 rounded-2xl font-white text-white uppercase tracking-widest
+                   shadow-[3px_3px_6px_#EDF1FE,-2px_-2px_7px_rgba(34,8,2,0.5)]
                    active:shadow-[inset_4px_4px_8px_#9a3412] active:translate-y-1 transition-all">
         <span class="relative z-10">Emitir Nota</span>
         
@@ -270,8 +274,13 @@
 
                     
 <div class="grid grid-cols-6 gap-8">
+
+
+
+
+    
                         <div class="col-span-3">
-                            <label class="text-[11px] font-black text-slate-400 uppercase mb-2 block tracking-widest">ID - (CPF/CNPJ)</label>
+                            <label class="text-[11px] font-white text-slate-400 uppercase mb-2 block tracking-widest">ID - (CPF/CNPJ)</label>
                             <input type="text" id="docInput" oninput="motorBusca(this.value)" class="input-tactical w-full text-slate-800 text-lg shadow-inner" placeholder="000.000.000-00">
                         </div>
 
