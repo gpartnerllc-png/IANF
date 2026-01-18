@@ -219,13 +219,7 @@
 
                     <div id="reader"></div>
 
-                    <div class="grid grid-cols-6 gap-8">
-                        <div class="col-span-3">
-                            <label class="text-[11px] font-black text-slate-400 uppercase mb-2 block tracking-widest">ID - (CPF/CNPJ)</label>
-                            <input type="text" id="docInput" oninput="motorBusca(this.value)" class="input-tactical w-full text-slate-800 text-lg shadow-inner" placeholder="000.000.000-00">
-                        </div>
-
-                       <div class="col-span-3 grid grid-cols-1 gap-6 p-6 bg-slate-900 rounded-3xl border border-slate-800 shadow-[20px_20px_60px_#070a11,-20px_-20px_60px_#111827]">
+                    <div class="col-span-3 grid grid-cols-1 gap-6 p-6 bg-slate-900 rounded-3xl border border-slate-800 shadow-[20px_20px_60px_#070a11,-20px_-20px_60px_#111827]">
     
     <div class="flex flex-col gap-2">
         <label class="text-[11px] font-black text-orange-500/70 uppercase tracking-[0.2em] ml-2">Autoridade Financeira (R$)</label>
@@ -273,27 +267,50 @@
     </button>
 </div>
 
+
+
+                    
+<div class="grid grid-cols-6 gap-8">
+                        <div class="col-span-3">
+                            <label class="text-[11px] font-black text-slate-400 uppercase mb-2 block tracking-widest">ID - (CPF/CNPJ)</label>
+                            <input type="text" id="docInput" oninput="motorBusca(this.value)" class="input-tactical w-full text-slate-800 text-lg shadow-inner" placeholder="000.000.000-00">
+                        </div>
+
+
+
+
+                    
                         <div class="col-span-3">
                             <label class="text-[11px] font-black text-slate-400 uppercase mb-2 block tracking-widest">E-mail</label>
                             <input type="email" id="emailInput" class="input-tactical w-full text-slate-800" placeholder="contato@exemplo.com">
                         </div>
+
+    
 
                         <div class="col-span-3">
                             <label class="text-[11px] font-black text-slate-400 uppercase mb-2 block tracking-widest">WhatsApp</label>
                             <input type="text" id="telInput" class="input-tactical w-full text-slate-800" placeholder="(00) 00000-0000">
                         </div>
 
+    
+
                         <div class="col-span-6">
                             <label class="text-[11px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Razão Social / Nome</label>
                             <input type="text" id="nomeInput" onblur="validarNomeSeguro(this)" class="input-tactical w-full bg-slate-50 text-slate-600 border-dashed" readonly placeholder="Aguardando validação...">
                         </div>
+
+
+    
 
                         <div class="col-span-6">
                             <label class="text-[11px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Descrição do Ativo / Itens Escaneados</label>
                             <textarea id="descInput" class="input-tactical w-full h-32 font-normal text-slate-600" placeholder="Os itens bipados aparecerão aqui automaticamente..."></textarea>
                         </div>
                     </div>                    
-                </div>                         
+                </div>   
+
+
+                
                 <div class="terminal-log shadow-xl">
                     <div id="logContent" class="h-32 overflow-y-auto leading-relaxed">
                         > Sistema Inicializado...<br>
