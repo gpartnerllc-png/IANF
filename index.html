@@ -207,12 +207,10 @@
                             <h2 class="text-xl font-black text-slate-700 uppercase italic"></h2>
                         </div>
                         <div class="flex gap-2">
-                             <label class="bg-blue-900 text-white px-6 py-4 rounded-lg text-[12px] font-black uppercase tracking-widest hover:bg-blue-800 transition-colors cursor-pointer">
-                                Leitor Nota Fiscal
                                 <input type="file" class="hidden" onchange="v12NeuralOCR(this)">
                             </label>
                             <button id="btnScanner" onclick="toggleScanner()" class="bg-slate-800 text-white px-7 py-5 rounded-lg text-[12px] font-black uppercase tracking-widest hover:bg-orange-800 transition-colors">
-                                Bipar Produtos
+                                Bipar Nota Fiscal
                             </button>
                         </div>
                     </div>
@@ -222,7 +220,7 @@
                     <div class="col-span-3 grid grid-cols-1 gap-6 p-6 bg-slate-900 rounded-3xl border border-slate-800 shadow-[20px_20px_60px_#070a11,-20px_-20px_60px_#111827]">
     
     <div class="flex flex-col gap-2">
-        <label class="text-[11px] font-black text-orange-500/70 uppercase tracking-[0.2em] ml-2">Autoridade Financeira (R$)</label>
+        <label class="text-[11px] font-black text-orange-500/70 uppercase tracking-[0.2em] ml-2">Auto Financer</label>
         <div class="relative group">
             <input type="number" id="valorInput" oninput="calcFiscal()" 
                    class="w-full bg-slate-900 p-5 rounded-2xl text-3xl font-bold text-orange-600 
@@ -234,7 +232,7 @@
     </div>
 
     <div class="flex flex-col gap-2">
-        <label class="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2">Destinar Fluxo (Slot V12)</label>
+        <label class="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] ml-2">Destinar Fluxo</label>
         <select id="slotDestino" 
                 class="w-full bg-slate-900 p-4 rounded-2xl text-white font-medium
                        shadow-[6px_6px_12px_#070a11,-6px_-6px_12px_#111827] 
@@ -259,10 +257,11 @@
     </div>
 
     <button onclick="emitir('A4')" 
-            class="group relative mt-2 overflow-hidden bg-orange-600 p-4 rounded-2xl font-black text-white uppercase tracking-widest
-                   shadow-[6px_6px_12px_#070a11,-2px_-2px_10px_rgba(234,88,12,0.5)]
+            class="group relative mt-2 overflow-hidden bg-orange-600 p-4 rounded-2xl font-white text-black uppercase tracking-widest
+                   shadow-[6px_6px_12px_#EDF1FE,-2px_-2px_7px_rgba(134,48,12,0.5)]
                    active:shadow-[inset_4px_4px_8px_#9a3412] active:translate-y-1 transition-all">
         <span class="relative z-10">Emitir Nota</span>
+        
         <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full duration-1000 transition-transform"></div>
     </button>
 </div>
