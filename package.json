@@ -1,0 +1,16 @@
+{
+  "name": "ianf",
+  "version": "2.0.0",
+  "private": true,
+  "description": "IANF - Sistema de Balanços e Nota Fiscal | Cloudflare Workers + D1 + KV + Workers AI",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply ianf-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply ianf-db --remote",
+    "tail": "wrangler tail"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
