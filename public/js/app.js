@@ -120,7 +120,7 @@ function switchView(view) {
 }
 
 async function carregarTudo() {
-  await Promise.allSettled([carregarAssinatura(), carregarDre(), carregarNotas(), carregarStatus(), carregarInsight()]);
+  await Promise.allSettled([carregarAssinatura(), carregarDre(), carregarNotas(), carregarStatus(), carregarInsight(), sdCarregar()]);
   if (USER?.role === 'admin') await Promise.allSettled([carregarAdmin()]);
 }
 
@@ -1369,6 +1369,256 @@ async function soaAposPagamento(btn) {
       method: 'POST', body: JSON.stringify({ order_nsu: btn.dataset.order }),
     });
     el.innerHTML = `<h4>Consulta liberada</h4>${lupaRiscoHtml(r, 'Risco')}${soaRodape(r)}${serproDetalhes(r)}`;
+  } catch (e) {
+    el.innerHTML = soaErro(e);
+  }
+}
+
+// ---------- Serasa Experian · APIs do portal ----------
+const SD_CAMPOS = {
+  document: { tipo: 'text', ph: 'CPF (11) ou CNPJ (14) dígitos' },
+  reportName: { tipo: 'select', ph: 'Relatório' },
+  reportNameOutro: { tipo: 'text', ph: 'Nome técnico do relatório (RELATORIO_...)' },
+  uf: { tipo: 'text', ph: 'UF', max: 2 },
+  features: { tipo: 'text', ph: 'optionalFeatures (separadas por vírgula)' },
+  parametros: { tipo: 'text', ph: 'reportParameters' },
+  valorOperacao: { tipo: 'text', ph: 'Valor da operação (R$)' },
+  tipoVenda: { tipo: 'select', opcoes: [['1', 'Venda à vista'], ['2', 'Venda a prazo']] },
+  politica: { tipo: 'select', opcoes: [['1', 'Política padrão'], ['2', 'Política conservadora']] },
+  numeroProposta: { tipo: 'text', ph: 'Número da proposta' },
+  busca: { tipo: 'text', ph: 'Busca (documento ou nome)' },
+  q: { tipo: 'text', ph: 'Filtro da lista' },
+  dataInicio: { tipo: 'text', ph: 'De (AAAA-MM-DD)' },
+  dataFim: { tipo: 'text', ph: 'Até (AAAA-MM-DD)' },
+  pagina: { tipo: 'text', ph: 'Página (1)' },
+  cnpj: { tipo: 'text', ph: 'CNPJ (14 dígitos)' },
+  nome: { tipo: 'text', ph: 'Razão social' },
+  lote: { tipo: 'text', ph: 'Um CPF/CNPJ por linha' },
+  ambInfomais: { tipo: 'select', opcoes: [['uat', 'Infomais · homologação (spec)'], ['prod', 'Infomais · produção'], ['sandbox', 'Infomais · sandbox']] },
+};
+const SD = { servicos: [], ambientes: [], carregando: false };
+
+function sdCampo(id) { return document.getElementById(`sdF_${id}`); }
+function sdValor(id) { return (sdCampo(id)?.value || '').trim(); }
+
+async function sdRecarregar() {
+  SD.servicos = [];
+  SD.carregando = false;
+  await sdCarregar(true);
+}
+
+async function sdCarregar(forcar) {
+  if (SD.servicos.length && !forcar) return SD.servicos;
+  if (SD.carregando) return SD.servicos;
+  SD.carregando = true;
+  const sel = $('sdServico');
+  try {
+    const data = await api('/integracao/serasa-apis?acao=catalogo', { method: 'POST', body: '{}' });
+    SD.servicos = data.servicos || [];
+    SD.ambientes = data.ambientes || [{ v: 'demo', t: 'demonstração' }];
+    const grupos = [];
+    for (const s of SD.servicos) {
+      let g = grupos.find((x) => x.g === s.grupo);
+      if (!g) { g = { g: s.grupo, itens: [] }; grupos.push(g); }
+      g.itens.push(s);
+    }
+    if (sel) {
+      sel.innerHTML = grupos.map((g) => `<optgroup label="${ddEsc(g.g)}">${g.itens.map((s) => `<option value="${s.acao}">${ddEsc(s.titulo)}${s.mutacao ? ' · escrita' : ''}</option>`).join('')}</optgroup>`).join('');
+    }
+    const amb = $('sdAmbiente');
+    if (amb) {
+      const nomes = { demo: 'Demonstração (mock público)', sandbox: 'Sandbox do contrato', uat: 'Homologação', prod: 'Produção oficial' };
+      amb.innerHTML = SD.ambientes.map((a) => `<option value="${a.v}">${ddEsc(nomes[a.v] || a.t)}</option>`).join('');
+      amb.value = data.ambientePadrao || 'demo';
+    }
+    sdServicoChange();
+    if (!data.comCredencial) {
+      const el = $('sd-result');
+      if (el && !el.innerHTML) el.innerHTML = '<p class="muted small">As frentes oficiais ficam liberadas quando as credenciais client-identities do portal estiverem salvas no cofre; a demonstração já responde os exemplos públicos do gateway.</p>';
+    }
+  } catch (e) {
+    if (sel) sel.innerHTML = '<option value="">Catálogo indisponível</option>';
+    const el = $('sd-result');
+    if (el) el.innerHTML = `<p class="form-error">${ddEsc(e.message || 'Não foi possível carregar o catálogo de APIs.')}</p>`;
+  } finally {
+    SD.carregando = false;
+  }
+  return SD.servicos;
+}
+
+function sdServicoAtual() {
+  return SD.servicos.find((s) => s.acao === ($('sdServico')?.value || '')) || SD.servicos[0] || null;
+}
+
+function sdAmbienteChange() {
+  const sel = $('sdAmbiente');
+  const el = $('sd-result');
+  if (!el) return;
+  const v = sel?.value;
+  el.innerHTML = v === 'demo'
+    ? '<p class="muted small">Demonstração: respostas de exemplo do gateway público da Serasa. Nenhum dado real é consultado e nada é cobrado.</p>'
+    : `<p class="muted small">Ambiente ${ddEsc(sel?.selectedOptions[0]?.text || v || '')}: usa suas credenciais client-identities e o contrato da conta.</p>`;
+}
+
+function sdServicoChange() {
+  const s = sdServicoAtual();
+  const area = $('sdCampos');
+  if (!s || !area) return;
+  const keys = (s.doc ? ['document'] : []).concat(s.campos || []);
+  area.innerHTML = keys.map((k) => {
+    const def = SD_CAMPOS[k];
+    if (!def) return '';
+    const id = `sdF_${k}`;
+    if (def.tipo === 'select') {
+      const opcoes = k === 'reportName'
+        ? (s.relatorios || []).map((r) => `<option value="${ddEsc(r.v)}">${ddEsc(r.t)}</option>`).join('') + '<option value="OUTRO">Outro (digitar o nome técnico)…</option>'
+        : def.opcoes.map(([v, t]) => `<option value="${ddEsc(v)}">${ddEsc(t)}</option>`).join('');
+      return `<select class="field" id="${id}"${k === 'reportName' ? ' onchange="UI.sdReportNameChange()"' : ''}>${opcoes}</select>`;
+    }
+    const extra = k === 'document' ? ' inputmode="numeric"' : '';
+    const max = def.max ? ` maxlength="${def.max}"` : '';
+    return `<input class="field" id="${id}" placeholder="${ddEsc(def.ph)}"${max}${extra}>`;
+  }).join('') + '<input class="field" id="sdF_reportNameOutro" placeholder="Nome técnico do relatório (RELATORIO_...)" style="display:none">';
+  sdReportNameChange();
+  const conf = $('sdConfirmarWrap');
+  if (conf) conf.style.display = s.mutacao ? '' : 'none';
+  const el = $('sd-result');
+  if (el) {
+    el.innerHTML = s.mutacao
+      ? '<p class="muted small">Frente de escrita: grava uma proposta no bureau. Marque a confirmação para executar.</p>'
+      : '<p class="muted small">' + ddEsc(s.grupo) + ' · ' + ddEsc(s.titulo) + '</p>';
+  }
+}
+
+function sdReportNameChange() {
+  const sel = sdCampo('reportName');
+  const outro = $('sdF_reportNameOutro');
+  if (outro) outro.style.display = sel?.value === 'OUTRO' ? '' : 'none';
+}
+
+function sdPares(pares) {
+  return (pares || []).filter((p) => p && p.valor).map((p) => `<div class="kv"><span>${ddEsc(p.rotulo)}</span><b>${ddEsc(p.valor)}</b></div>`).join('');
+}
+
+function sdRenderRelatorio(r) {
+  const blocos = (r.blocos || []).map((b) => `<div class="kv"><span>${ddEsc(b.bloco)}</span><b>${ddEsc(b.itens)} ${b.itens === 1 ? 'item' : 'itens'}${b.reportName ? ` · ${ddEsc(b.reportName)}` : ''}</b></div>`).join('');
+  const score = (r.score || []).map((p) => `<div class="kv"><span>${ddEsc(p.rotulo)}</span><b>${ddEsc(p.valor)}</b></div>`).join('');
+  return `
+    ${r.nome ? `<div class="kv"><span>Titular</span><b>${ddEsc(r.nome)}${r.documento ? ` · ${ddEsc(r.documento)}` : ''}</b></div>` : ''}
+    ${(r.reportNames || []).length ? `<div class="kv"><span>Relatório retornado</span><b>${ddEsc(r.reportNames.join(' · '))}</b></div>` : ''}
+    ${sdPares(r.detalhesCadastro)}
+    ${score ? `<div class="dd-sub">Pontuações</div>${score}` : ''}
+    ${sdPares(r.endereco)}
+    <div class="kv"><span>Negativas</span><b>${ddEsc(r.negativacoes || '—')}</b></div>
+    ${blocos ? `<div class="dd-sub">Blocos do relatório</div>${blocos}` : ''}
+    ${(r.opcionais || []).length ? `<div class="kv"><span>Features opcionais entregues</span><b>${ddEsc(r.opcionais.join(', '))}</b></div>` : ''}
+    ${!(r.detalhesCadastro || []).length && !blocos ? '<p class="muted small">O relatório veio sem blocos de dados neste ambiente.</p>' : ''}`;
+}
+
+function sdRenderRecomenda(r) {
+  if (r.tipo === 'lista') {
+    const itens = (r.itens || []).map((p) => `<div class="kv"><span>${ddEsc(p.rotulo || 'Proposta')}</span><b>${[p.documento, p.nome, p.status, p.limite != null ? fmt(p.limite) : ''].filter(Boolean).map((x) => ddEsc(String(x))).join(' · ')}</b></div>`).join('');
+    return `<div class="kv"><span>Propostas localizadas</span><b>${r.total ?? (r.itens || []).length}</b></div>${itens || '<p class="muted small">Nenhuma proposta registrada neste ambiente.</p>'}`;
+  }
+  const neg = r.negatives || {};
+  const semResposta = !r.numeroProposta && !r.mensagem && !r.tipoRecomendacao && r.limiteRecomendado == null && r.score == null;
+  if (semResposta) {
+    return `
+    ${r.documento ? `<div class="kv"><span>Titular</span><b>${ddEsc(r.documento)}</b></div>` : ''}
+    <p class="muted small">O pedido foi aceito no formato correto, mas este ambiente devolve apenas o eco da requisição. Número da proposta, limite recomendado e orientação de venda aparecem no ambiente oficial do contrato.</p>`;
+  }
+  return `
+    ${r.numeroProposta ? `<div class="kv"><span>Nº da proposta</span><b>${ddEsc(r.numeroProposta)}</b></div>` : ''}
+    ${r.nome ? `<div class="kv"><span>Titular</span><b>${ddEsc(r.nome)}${r.documento ? ` · ${ddEsc(r.documento)}` : ''}</b></div>` : ''}
+    ${r.limiteRecomendado != null ? `<div class="kv"><span>Limite recomendado</span><b>${fmt(r.limiteRecomendado)}</b></div>` : ''}
+    ${r.score != null ? `<div class="kv"><span>Score Serasa</span><b>${ddEsc(String(r.score))}${r.taxa != null ? ` · taxa ${ddEsc(String(r.taxa))}` : ''}</b></div>` : ''}
+    ${r.nivelRisco != null ? `<div class="kv"><span>Nível de risco</span><b>${ddEsc(String(r.nivelRisco))}</b></div>` : ''}
+    ${r.tipoRecomendacao ? `<div class="kv"><span>Tipo de recomendação</span><b>${ddEsc(r.tipoRecomendacao)}</b></div>` : ''}
+    ${r.faixaRenda != null ? `<div class="kv"><span>Faixa de renda</span><b>${ddEsc(String(r.faixaRenda))}</b></div>` : ''}
+    ${r.mensagem ? `<div class="kv"><span>Resposta do bureau</span><b>${ddEsc(r.mensagem)}</b></div>` : ''}
+    <div class="dd-sub">Blocos analisados</div>
+    ${['negativos', 'consultas', 'participacoes', 'cheques', 'habitosPagamento'].map((k) => `<div class="kv"><span>${ddEsc({ negativos: 'Anotações negativas', consultas: 'Consultas Serasa', participacoes: 'Participações societárias', cheques: 'Cheques devolvidos', habitosPagamento: 'Hábitos de pagamento' }[k])}</span><b>${ddEsc(String(neg[k] ?? r[k] ?? '—'))}</b></div>`).join('')}`;
+}
+
+function sdRenderLista(r) {
+  const itens = (r.itens || []).map((p) => `
+    <div class="dd-sub">
+      <div class="kv"><span>${ddEsc(p.rotulo || 'Registro')}${p.id ? ` · ${ddEsc(p.id)}` : ''}</span><b>${[p.status, p.data ? fmtDataBr(p.data) || p.data : ''].filter(Boolean).map((x) => ddEsc(String(x))).join(' · ')}</b></div>
+      ${sdPares(p.campos)}
+    </div>`).join('');
+  return `
+    <div class="kv"><span>Registros</span><b>${ddEsc(String(r.total ?? (r.itens || []).length))}</b></div>
+    ${itens || '<p class="muted small">Nenhum registro retornado por este ambiente. A chamada funcionou: o catálogo vazio é do contrato ou da base de exemplo.</p>'}`;
+}
+
+function sdRenderInfomais(r) {
+  const bloco = (t, linhas) => (linhas && linhas.length ? `<div class="dd-sub">${ddEsc(t)}</div>${linhas.map((l) => `<div class="kv"><span>—</span><b>${ddEsc(String(l))}</b></div>`).join('')}` : '');
+  return `
+    <div class="kv"><span>Titular</span><b>${ddEsc(r.nome || '—')}${r.documento ? ` · ${ddEsc(r.documento)}` : ''}</b></div>
+    ${sdPares(r.campos)}
+    ${r.renda ? `<div class="kv"><span>Renda estimada</span><b>${fmt(r.renda)}</b></div>` : ''}
+    ${r.classeSocial ? `<div class="kv"><span>Classe social</span><b>${ddEsc(r.classeSocial)}</b></div>` : ''}
+    ${r.mosaic ? `<div class="kv"><span>Mosaico</span><b>${ddEsc(r.mosaic)}</b></div>` : ''}
+    ${r.poderCompra ? `<div class="kv"><span>Poder de compra</span><b>${ddEsc(r.poderCompra)}</b></div>` : ''}
+    ${r.risco ? `<div class="kv"><span>Triagem de risco</span><b>${ddEsc(r.risco)}</b></div>` : ''}
+    ${bloco('Endereços', r.endereco)}
+    ${bloco('Telefones', r.telefones)}
+    ${bloco('Sócios / representações', r.socios)}
+    ${bloco('Afinidades de consumo', r.afinidades)}`;
+}
+
+function sdRenderVerify(r) {
+  const itens = Array.isArray(r) ? r : (r.results || r.content || []);
+  return itens.map((it, i) => `<div class="dd-sub"><p><b>Registro ${i + 1}</b></p>${normalizarVerificacaoLocal(it)}</div>`).join('')
+    || '<p class="muted small">Nenhum item no lote.</p>';
+}
+
+function normalizarVerificacaoLocal(d = {}) {
+  const grupos = (d.validationGroups || []).map((g) => `<div class="kv"><span>${ddEsc(g.code || '')}</span><b>${ddEsc(g.message || '')}${g.rating ? ` · ${ddEsc(g.rating)}` : ''}</b></div>`).join('');
+  return `${d.verificationScore != null ? `<div class="kv"><span>Score</span><b>${ddEsc(String(d.verificationScore))}</b></div>` : ''}
+    ${d.verificationRisk ? `<div class="kv"><span>Risco</span><b>${ddEsc(d.verificationRisk)}</b></div>` : ''}
+    ${grupos || ddBloque(d)}`;
+}
+
+async function consultarSd() {
+  const s = sdServicoAtual();
+  const el = $('sd-result');
+  if (!s) { await sdCarregar(); return; }
+  const body = { ambiente: $('sdAmbiente')?.value || 'demo' };
+  const doc = sdValor('document').replace(/\D/g, '');
+  if (s.doc === 'pf' && doc.length !== 11) return alert('Informe o CPF (11 dígitos).');
+  if (s.doc === 'pj' && doc.length !== 14) return alert('Informe o CNPJ (14 dígitos).');
+  if (s.doc === 'ambos' && ![11, 14].includes(doc.length)) return alert('Informe CPF (11) ou CNPJ (14) dígitos.');
+  if (doc) body.document = doc;
+  for (const k of (s.campos || [])) {
+    if (k === 'lote') continue;
+    const v = sdValor(k);
+    if (v) body[k] = v;
+  }
+  if ((s.campos || []).includes('lote')) {
+    body.pessoas = sdValor('lote').split(/[\s,;]+/).map((x) => x.replace(/\D/g, '')).filter((x) => x.length === 11 || x.length === 14).slice(0, 20).map((d) => ({ document: d }));
+    if (!body.pessoas.length) return alert('Informe ao menos um CPF/CNPJ por linha no lote.');
+  }
+  if (s.mutacao) {
+    if (!$('sdConfirmar')?.checked) return alert('Marque a confirmação: este chamado grava uma proposta no bureau.');
+    body.confirmar = true;
+  }
+  el.innerHTML = '<p class="muted">Consultando a Serasa...</p>';
+  try {
+    const data = await api(`/integracao/serasa-apis?acao=${encodeURIComponent(s.acao)}`, { method: 'POST', body: JSON.stringify(body) });
+    const r = data.resumo || {};
+    let corpo;
+    if (s.acao.startsWith('relatorio-')) corpo = sdRenderRelatorio(r);
+    else if (s.acao.startsWith('recomenda-')) corpo = sdRenderRecomenda(r);
+    else if (s.acao.startsWith('infomais-')) corpo = sdRenderInfomais(r);
+    else if (s.acao.startsWith('verify-lote')) corpo = sdRenderVerify(data.detalhes || []);
+    else corpo = sdRenderLista(r);
+    el.innerHTML = `
+      ${serproCabecalho(s.titulo, { ambiente: data.ambiente === 'oficial' ? 'prod' : data.ambiente === 'demonstração' ? 'demo' : data.ambiente, fonte: data.fonte })}
+      ${data.vazio ? '<p class="muted small">A chamada foi aceita, mas este ambiente não devolve corpo para este serviço.</p>' : ''}
+      ${corpo}
+      <p class="muted small mt-2">${ddEsc(data.caminho || '')}</p>
+      ${serproDetalhes(data)}`;
   } catch (e) {
     el.innerHTML = soaErro(e);
   }
@@ -2639,6 +2889,23 @@ async function lupaRunRecomenda(doc) {
   return lupaRecomendaHtml(d);
 }
 
+// Dossiê completo da base de risco (API do portal) — card neutro, sem nome de fornecedor nem URL.
+async function lupaRunDossie(doc) {
+  const pj = String(doc).length === 14;
+  const d = await api(`/integracao/serasa-apis?acao=${pj ? 'relatorio-pj' : 'relatorio-pf'}`, {
+    method: 'POST',
+    body: JSON.stringify({ document: doc, reportName: pj ? 'RELATORIO_AVANCADO_PJ' : 'RELATORIO_AVANCADO_PF' }),
+  });
+  const r = d.resumo || {};
+  return `<div class="lupa-status"><span>Dossiê</span><b>${ddEsc(lupaNeutro((r.reportNames || []).join(' · ')) || 'relatório retornando por contrato')}</b></div>
+    ${r.nome ? `<div class="kv"><span>Titular</span><b>${ddEsc(r.nome)}</b></div>` : ''}
+    ${sdPares(r.detalhesCadastro)}
+    ${sdPares(r.endereco)}
+    <div class="kv"><span>Registros negativos</span><b>${ddEsc(lupaNeutro(r.negativacoes) || '—')}</b></div>
+    ${(r.blocos || []).length ? `<div class="dd-sub">Blocos do dossiê</div>${r.blocos.slice(0, 14).map((b) => `<div class="kv"><span>${ddEsc(b.bloco)}</span><b>${ddEsc(String(b.itens))} ${b.itens === 1 ? 'item' : 'itens'}</b></div>`).join('')}` : ''}
+    <p class="muted small mt-2">Conteúdo do contrato de risco · consulta sob demanda</p>`;
+}
+
 function lupaSecoes(tipo, doc) {
   if (tipo === 'cnpj') return [
     { id: 'cad', ico: '🏢', t: 'Cadastro Empresarial', sub: 'Receita Federal · dados oficiais completos', run: () => lupaRunCnpjOficial(doc) },
@@ -2649,6 +2916,7 @@ function lupaSecoes(tipo, doc) {
     { id: 'score', ico: '📊', t: SERASA_PRODUTOS.crednet.rotulo, sub: SERASA_PRODUTOS.crednet.sub, custo: SERASA_PRODUTOS.crednet.custo, auto: false, gatilho: lupaGatilhoUf('score'), run: () => lupaRunCrednet(doc) },
     { id: 'passivo', ico: '🧮', t: SERASA_PRODUTOS.concentra.rotulo, sub: SERASA_PRODUTOS.concentra.sub, custo: SERASA_PRODUTOS.concentra.custo, auto: false, run: () => lupaRunBureau('concentre', doc, { adicionais: [1, 2, 3, 4] }) },
     { id: 'recomenda', ico: '🎯', t: 'Limite de Crédito Recomendado', sub: 'quanto a base empresta · exige valor da operação', custo: 24, auto: false, gatilho: lupaGatilhoRecomenda(), run: () => lupaRunRecomenda(doc) },
+    { id: 'dossie', ico: '📑', t: 'Dossiê de Crédito', sub: 'relatório completo da base de risco · consulta sob demanda', auto: false, run: () => lupaRunDossie(doc) },
   ];
   if (tipo === 'cpf') return [
     { id: 'basico', ico: '👤', t: 'Validação do Documento', sub: 'estrutura e dígitos verificadores', run: () => lupaRunCpfBasico(doc) },
@@ -2661,6 +2929,7 @@ function lupaSecoes(tipo, doc) {
     { id: 'score', ico: '📊', t: SERASA_PRODUTOS.crednet.rotulo, sub: SERASA_PRODUTOS.crednet.sub, custo: SERASA_PRODUTOS.crednet.custo, auto: false, gatilho: lupaGatilhoUf('score'), run: () => lupaRunCrednet(doc) },
     { id: 'passivo', ico: '🧮', t: SERASA_PRODUTOS.concentra.rotulo, sub: SERASA_PRODUTOS.concentra.sub, custo: SERASA_PRODUTOS.concentra.custo, auto: false, run: () => lupaRunBureau('concentre', doc, { adicionais: [1, 2, 3, 4] }) },
     { id: 'recomenda', ico: '🎯', t: 'Limite de Crédito Recomendado', sub: 'quanto a base empresta · exige valor da operação', custo: 24, auto: false, gatilho: lupaGatilhoRecomenda(), run: () => lupaRunRecomenda(doc) },
+    { id: 'dossie', ico: '📑', t: 'Dossiê de Crédito', sub: 'relatório completo da base de risco · consulta sob demanda', auto: false, run: () => lupaRunDossie(doc) },
   ];
   if (tipo === 'cep') return [
     { id: 'ender', ico: '📍', t: 'Endereço Completo', sub: 'logradouro, bairro, cidade e UF', run: () => lupaRunCep(doc) },
@@ -2772,6 +3041,7 @@ const UI = {
   consultarDirectdata, ddEndpointChange,
   consultarSerpro, serproServicoChange, baixarCndPdf,
   consultarSoa, soaServicoChange, soaSaldo, soaExtrato, soaAposPagamento, soaCopiarPix, soaCatalogos,
+  consultarSd, sdServicoChange, sdAmbienteChange, sdReportNameChange, sdRecarregar,
   buscaUnica, lupaDetectarChange, lupaExecutar, lupaAbrirPix,
   carregarSaldoZapsign, toggleCertForm, criarCertificado, carregarProtocolos,
   enviarChat, analisarNotaIA, alterarUser, removerUser,

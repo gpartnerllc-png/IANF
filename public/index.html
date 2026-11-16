@@ -464,6 +464,21 @@
                     <div id="soa-result" class="result-card mt-3"></div>
                 </div>
                 <div class="panel glass">
+                    <h3 class="panel-title">🧬 Serasa Experian · APIs do Portal <span class="panel-sub">crédito · recomenda · monitoramento · enriquecimento</span></h3>
+                    <p class="muted small">Todos os contratos REST publicados no portal de desenvolvedores: relatórios de crédito PF/PJ (dados avulsos, básico, intermediário, avançado, agrupe, credit rating), Serasa Recomenda, Verificação de Dados (Verify/PEP), Monitoramento (MDCF, Me Proteja, Alerta PME), Saúde Financeira do distribuidor (SDSN) e Infomais. Comece pela demonstração — usa o ambiente de testes público e não cobra do contrato.</p>
+                    <div class="search-row mt-3">
+                        <select class="field" id="sdServico" onchange="UI.sdServicoChange()"></select>
+                        <select class="field" id="sdAmbiente" style="max-width:200px" onchange="UI.sdAmbienteChange()"></select>
+                    </div>
+                    <div id="sdCampos" class="search-row mt-3"></div>
+                    <label class="check-row mt-2" id="sdConfirmarWrap"><input type="checkbox" id="sdConfirmar"> Confirmar: este chamado grava uma proposta no bureau e é cobrado pelo contrato</label>
+                    <div class="btn-row mt-3">
+                        <button class="btn btn-gradient" onclick="UI.consultarSd()">Executar</button>
+                        <button class="btn btn-ghost small" onclick="UI.sdRecarregar()">Recarregar catálogo</button>
+                    </div>
+                    <div id="sd-result" class="result-card mt-3"></div>
+                </div>
+                <div class="panel glass">
                     <h3 class="panel-title">💳 APIBrasil <span class="panel-sub">Dados cadastrais PJ por crédito</span></h3>
                     <p class="muted small">Consulta cadastral de CNPJ e quadro societário pagas por crédito (R$ 0,04 a consulta).</p>
                     <div class="search-row mt-3">

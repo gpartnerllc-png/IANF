@@ -9,6 +9,10 @@ import { apibrasilEnabled, saldo as apibrasilSaldo, consultarCnpj as apibrasilCo
 import { directdataEnabled, consultar as directdataConsultar, validarEndpoint } from '../lib/directdata.js';
 import { soaEnabled, soaRequest, soaBase, soaAmbiente, SOA_OPS, normalizarSerasa, normalizarSaldo, normalizarExtrato, normalizarRecomenda, normalizarCdc } from '../lib/soa.js';
 import { infinitepayEnabled, criarLinkCheckout, consultarPagamento } from '../lib/infinitepay.js';
+import {
+  chamarSerasaApi, catalogoSerasaApis, serasaServicoExiste, serasaAmbientesDisponiveis, SERASA_SERVICOS, SERASA_AMBIENTES,
+  normalizarRelatorioCredito, normalizarRecomendaResposta, normalizarListaGenerica, normalizarInfomais,
+} from '../lib/serasaapis.js';
 import { calcularFiscal } from '../lib/fiscal.js';
 
 export async function handleStatus(env) {
@@ -22,6 +26,7 @@ export async function handleStatus(env) {
     { nome: 'Serpro PIN/IA', status: serproEnabled(env) ? 'online' : 'pendente', detalhe: serproEnabled(env) ? 'Credenciais configuradas' : 'Assinatura em loja.serpro.gov.br' },
     { nome: 'Serasa Experian (Verify PF/PJ)', status: serasaEnabled(env) ? 'online' : 'pendente', detalhe: serasaEnabled(env) ? 'Token configurado' : 'Defina SERASA_TOKEN' },
     { nome: 'Serasa Experian (consultas completas)', status: soaEnabled(env) ? 'online' : 'pendente', detalhe: soaEnabled(env) ? `Ambiente ${soaAmbiente(env) === 'homolog' ? 'homologação' : 'produção'} · credenciais configuradas` : 'Defina os secrets SOA_EMAIL e SOA_SENHA' },
+    { nome: 'Serasa Experian (APIs do portal)', status: 'online', detalhe: serasaEnabled(env) ? `${Object.keys(SERASA_SERVICOS).length} serviços · demonstração + sandbox + homologação + oficial` : `${Object.keys(SERASA_SERVICOS).length} serviços na demonstração pública · credenciais liberam homologação/oficial` },
     { nome: 'APIBrasil (Dados CNPJ)', status: apibrasilEnabled(env) ? 'online' : 'pendente', detalhe: apibrasilEnabled(env) ? 'Token configurado' : 'Defina APIBRASIL_TOKEN' },
     { nome: 'DirectData (Big Data)', status: directdataEnabled(env) ? 'online' : 'pendente', detalhe: directdataEnabled(env) ? 'Token configurado' : 'Defina DIRECTDATA_TOKEN' },
     { nome: 'PGFN Dívida Ativa (Regularize)', status: serproEnabled(env) ? 'online' : 'pendente', detalhe: serproEnabled(env) ? 'API Serpro configurada' : 'API em loja.serpro.gov.br/consulta-divida-ativa · portal Regularize disponível' },
@@ -1615,4 +1620,74 @@ export async function handleSoa(env, request) {
     detalhe: `${opKey} ${r.resumo?.documento || r.resumo?.uniqueID || ''}`.slice(0, 200), ip: getIp(request),
   });
   return ok({ op: opKey, resumo: r.resumo, detalhes: r.dados, ambiente: r.ambiente, custo: r.custo, fonte: r.fonte });
+}
+
+// ============ SERASA EXPERIAN - APIs DO PORTAL (crédito, recomenda, verify, monitoramento, SDSN, infomais) ============
+
+function normalizarSerasaApi(acao, r) {
+  if (acao === 'relatorio-pf' || acao === 'relatorio-pj') return normalizarRelatorioCredito(r.data);
+  if (acao.startsWith('recomenda-')) return normalizarRecomendaResposta(r.data);
+  if (acao.startsWith('infomais-')) return normalizarInfomais(r.data);
+  return normalizarListaGenerica(r.data);
+}
+
+export async function handleSerasaApis(env, request) {
+  const auth = await requireAuth(env, request);
+  if (auth.error) return auth.error;
+
+  const url = new URL(request.url);
+  const acao = url.searchParams.get('acao') || 'relatorio-pf';
+
+  if (acao === 'catalogo') {
+    const ambientes = serasaAmbientesDisponiveis(env);
+    return ok({
+      servicos: catalogoSerasaApis(),
+      ambientes: ambientes.map((a) => ({ v: a, t: SERASA_AMBIENTES[a] })),
+      ambientePadrao: ambientes.includes('prod') ? 'prod' : ambientes[0],
+      comCredencial: ambientes.length > 1,
+    });
+  }
+
+  if (!serasaServicoExiste(acao)) return err('Serviço Serasa desconhecido.', 400, 'SERVICO_INVALIDO');
+  if (!(await rateLimit(env, getIp(request), 'serasaapis'))) return err('Limite de consultas à Serasa atingido.', 429, 'RATE_LIMIT');
+
+  const body = await readBody(request);
+  const svc = SERASA_SERVICOS[acao];
+  if (svc.mutacao && body.confirmar !== true) {
+    return err('Confirme a execução: este chamado registra uma proposta de crédito no bureau e é cobrado pelo contrato.', 400, 'CONFIRMACAO_OBRIGATORIA');
+  }
+
+  const r = await chamarSerasaApi(env, acao, body, textoAmbiente(body.ambiente || url.searchParams.get('ambiente')));
+
+  if (!r.ok) {
+    await audit(env, { userId: auth.user.id, email: auth.user.email, acao: 'SERASA_API_FALHA', detalhe: `${acao} ${r.code || ''} ${r.message || ''}`.slice(0, 200), ip: getIp(request) });
+    const status = r.code === 'CPF_INVALIDO' || r.code === 'CNPJ_INVALIDO' || r.code === 'PARAMETROS_INVALIDOS'
+      || r.code === 'RELATORIO_INVALIDO' || r.code === 'PROPOSTA_INVALIDA' || r.code === 'LOTE_VAZIO' ? 400
+      : r.code === 'SERASA_TOKEN_EXPIRADO' || r.code === 'SERASA_DEMO_RECUSADA' ? 401
+      : r.code === 'SERASA_LIMITE' ? 429
+      : r.code === 'SERASA_NAO_CONFIGURADO' ? 503 : 502;
+    return json({ ok: false, code: r.code, message: r.message, ambiente: r.ambiente || null, detalhes: r.dados || null }, status);
+  }
+
+  await audit(env, {
+    userId: auth.user.id, email: auth.user.email,
+    acao: svc.mutacao ? 'SERASA_API_ALTERACAO' : 'SERASA_API_CONSULTA',
+    detalhe: `${acao} ${onlyNumbers(body.document || '')}`.slice(0, 200), ip: getIp(request),
+  });
+
+  return ok({
+    servico: acao,
+    titulo: svc.t,
+    resumo: normalizarSerasaApi(acao, r),
+    detalhes: r.data,
+    vazio: !r.data || (typeof r.data === 'object' && Object.keys(r.data).length === 0),
+    ambiente: r.ambiente,
+    caminho: r.origem,
+    fonte: `Serasa Experian · APIs do portal (${r.ambiente})`,
+  });
+}
+
+function textoAmbiente(v) {
+  const s = String(v || '').toLowerCase();
+  return ['demo', 'sandbox', 'uat', 'prod'].includes(s) ? s : 'demo';
 }
