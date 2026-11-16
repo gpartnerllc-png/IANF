@@ -1101,6 +1101,279 @@ async function consultarSerasa() {
   }
 }
 
+// ---------- Serasa Experian · consultas completas (bureau) ----------
+const SOA_SERVICOS = [
+  { v: 'basica-pf', t: 'Consulta cadastral básica · CPF', doc: 11, custo: 5.40 },
+  { v: 'basica-pj', t: 'Consulta cadastral básica · CNPJ', doc: 14, custo: 5.40 },
+  { v: 'crednet-pf', t: 'CredNet — score e negativas · CPF', doc: 11, custo: 16.06, uf: true },
+  { v: 'crednet-pj', t: 'CredNet — score e negativas · CNPJ', doc: 14, custo: 16.06, uf: true },
+  { v: 'concentre-pf', t: 'Concentre — passivo concentrado · CPF', doc: 11, custo: 33.87 },
+  { v: 'concentre-pj', t: 'Concentre — passivo concentrado · CNPJ', doc: 14, custo: 33.87 },
+  { v: 'recomenda-pf', t: 'Recomenda — limite de crédito · CPF', doc: 11, custo: 24, valor: true },
+  { v: 'recomenda-pj', t: 'Recomenda — limite de crédito · CNPJ', doc: 14, custo: 24, valor: true },
+  { v: 'cdc-pf-basica', t: 'Prova cadastral PF (nome + nascimento)', doc: 11, nasc: true },
+  { v: 'cdc-pj-qsa', t: 'Quadro de sócios (QSA)', doc: 14 },
+  { v: 'cdc-pj-simples', t: 'Situação no Simples Nacional', doc: 14 },
+  { v: 'negativacao-tipos', t: 'Códigos de restrição disponíveis', doc: 0 },
+  { v: 'negativacao-baixas', t: 'Códigos de baixa disponíveis', doc: 0 },
+  { v: 'negativacao-lista', t: 'Negativações da conta (por condição)', doc: 0, condicao: true },
+  { v: 'negativacao-consultar', t: 'Consultar uma negativação (uniqueID)', doc: 0, unique: true },
+  { v: 'negativacao-inserir', t: 'Negativar devedor (escrita)', doc: 0, mutacao: true, incluir: true },
+  { v: 'negativacao-excluir', t: 'Baixar negativação (escrita)', doc: 0, mutacao: true, unique: true, baixa: true },
+  { v: 'recarga-pix', t: 'Recarga da conta via PIX', doc: 0, mutacao: true, valor: true },
+];
+
+function soaServicoAtual() {
+  return SOA_SERVICOS.find((s) => s.v === ($('soaServico')?.value || 'basica-pf')) || SOA_SERVICOS[0];
+}
+
+function soaServicoChange() {
+  const s = soaServicoAtual();
+  const doc = $('soaDoc');
+  if (doc) {
+    doc.placeholder = s.doc === 11 ? 'CPF (000.000.000-00)' : s.doc === 14 ? 'CNPJ (00.000.000/0000-00)' : 'não usa documento nesta frente';
+    doc.disabled = !s.doc;
+  }
+  const campos = { soaUf: !!s.uf, soaNasc: !!s.nasc, soaValor: !!s.valor, soaUnique: !!s.unique, soaCondicao: !!s.condicao, soaBaixa: !!s.baixa };
+  for (const [id, on] of Object.entries(campos)) {
+    const el = $(id);
+    if (el) el.style.display = on ? '' : 'none';
+  }
+  const form = $('soaIncluirWrap');
+  if (form) form.style.display = s.incluir ? '' : 'none';
+  const conf = $('soaConfirmarWrap');
+  if (conf) conf.style.display = s.mutacao ? '' : 'none';
+  const res = $('soa-result');
+  if (res) res.innerHTML = s.mutacao
+    ? '<p class="muted small">Frente de escrita: afeta dados reais no bureau ou a conta de billing. Marque a confirmação para executar.</p>'
+    : `<p class="muted small">Tarifa desta frente: ${s.custo ? fmt(s.custo) + ' por consulta' : 'sem tarifa (administração/consulta de catálogo)'}.</p>`;
+}
+
+function soaRodape(data) {
+  return `<p class="muted small mt-2">${ddEsc(data.fonte || 'Base de risco')} · ambiente ${ddEsc(data.ambiente || '—')}${data.custo ? ` · tarifa ${fmt(data.custo)}` : ''}</p>`;
+}
+
+function soaRenderNegativacao(data) {
+  const r = data.resumo || {};
+  const tipos = (r.tipos || []).map((t) => `<div class="kv"><span>${ddEsc(t.codigoRestricao || '')}</span><b>${ddEsc(t.restricaoDescricao || '')}</b></div>`).join('');
+  const baixas = (r.codigosBaixa || []).map((t) => `<div class="kv"><span>${ddEsc(t.codigoBaixa ?? t.codigo ?? '')}</span><b>${ddEsc(t.descricao || t.baixaDescricao || '')}</b></div>`).join('');
+  const devedores = (r.devedores || []).map((d) => `<div class="kv"><span>${ddEsc(d.nome || d.documento || '')}</span><b>${ddEsc(d.documento || '')} · ${ddEsc(d.tipoDevedor || '')}${d.endereco?.cidade ? ` · ${ddEsc(d.endereco.cidade)}/${ddEsc(d.endereco.estado || '')}` : ''}</b></div>`).join('');
+  const erros = (r.erros || []).map((e) => `<div class="kv"><span>${ddEsc(e.codigo || '')}</span><b>${ddEsc(e.mensagem || '')}</b></div>`).join('');
+  const rest = r.restricao;
+  const credor = r.credor && (r.credor.nomeCredor || r.credor.documentoCredor);
+  const linhas = (r.lista || []).slice(0, 40).map((it, i) => {
+    const cam = ['uniqueID', 'documento', 'nome', 'nomeCredor', 'documentoCredor', 'codigoRestricao', 'restricaoDescricao', 'valor', 'dataHoraInclusao', 'dataVencimento', 'situacao', 'descricao'];
+    const pares = cam.filter((k) => it[k] !== undefined && it[k] !== null && it[k] !== '');
+    if (!pares.length) return `<div class="kv"><span>Registro ${i + 1}</span><b class="small" style="word-break:break-all">${ddEsc(JSON.stringify(it)).slice(0, 200)}</b></div>`;
+    return `<div class="kv"><span>${ddEsc(String(it.nome || it.documento || it.uniqueID || `Registro ${i + 1}`))}</span><b>${pares.filter((k) => k !== 'nome' && k !== 'documento').map((k) => ddEsc(String(it[k]))).join(' · ')}</b></div>`;
+  }).join('');
+  return `
+    ${r.uniqueID ? `<div class="kv"><span>uniqueID</span><b>${ddEsc(r.uniqueID)}</b></div>` : ''}
+    ${r.situacao ? `<div class="kv"><span>Situação</span><b>${ddEsc(typeof r.situacao === 'string' ? r.situacao : JSON.stringify(r.situacao))}</b></div>` : ''}
+    ${credor ? `<div class="kv"><span>Credor</span><b>${ddEsc(r.credor.nomeCredor || '')}${r.credor.documentoCredor ? ` · ${ddEsc(r.credor.documentoCredor)}` : ''}</b></div>` : ''}
+    ${rest ? `<div class="kv"><span>Restrição</span><b>${ddEsc(rest.codigoRestricao ?? '')}${rest.contrato ? ` · contrato ${ddEsc(rest.contrato)}` : ''}${rest.nossoNumero ? ` · nn ${ddEsc(rest.nossoNumero)}` : ''}${rest.valor ? ` · ${fmt(rest.valor)}` : ''}</b></div>` : ''}
+    ${rest?.dataVencimento ? `<div class="kv"><span>Vencimento</span><b>${ddEsc(fmtDataBr(rest.dataVencimento) || rest.dataVencimento)}</b></div>` : ''}
+    ${r.inclusao ? `<div class="kv"><span>Inclusão</span><b>${ddEsc(r.inclusao)}</b></div>` : ''}
+    ${r.baixa ? `<div class="kv"><span>Baixa aplicada</span><b>${ddEsc(r.baixa.baixaDescricao || '')}${r.baixa.codigoBaixa != null ? ` (código ${ddEsc(r.baixa.codigoBaixa)})` : ''}</b></div>
+      ${r.baixa.credor ? `<div class="kv"><span>Credor baixado</span><b>${ddEsc(r.baixa.credor)}</b></div>` : ''}
+      ${r.baixa.devedor ? `<div class="kv"><span>Devedor baixado</span><b>${ddEsc(r.baixa.devedor)}</b></div>` : ''}
+      ${r.baixa.valor ? `<div class="kv"><span>Valor</span><b>${fmt(r.baixa.valor)}</b></div>` : ''}
+      ${r.baixa.dataHoraExclusao ? `<div class="kv"><span>Exclusão</span><b>${ddEsc(r.baixa.dataHoraExclusao)}</b></div>` : ''}` : ''}
+    ${linhas ? `<div class="dd-sub">Negativações registradas</div>${linhas}` : ''}
+    ${devedores}${erros}${tipos}${baixas}
+    ${!(devedores || erros || tipos || baixas || linhas || credor || rest || r.baixa || r.inclusao || r.uniqueID || r.situacao) ? '<p class="muted small">Operação concluída sem itens de detalhe.</p>' : ''}`;
+}
+
+function soaRenderAdmin(data) {
+  const r = data.resumo || {};
+  if (typeof r.saldo === 'number') return `<div class="kv"><span>Saldo disponível</span><b>${fmt(r.saldo)}</b></div>`;
+  if (r.detalhes) {
+    return `<div class="kv"><span>Consumo do período</span><b>${r.quantidade ?? '—'} consultas · ${fmt(r.valor)}</b></div>
+      ${r.detalhes.map((d) => `<div class="kv indent"><span>${ddEsc(d.produto || d.documento || 'Consulta')}${d.dataHora ? ` · ${ddEsc(String(d.dataHora).slice(0, 16))}` : ''}</span><b>${d.quantidade != null ? `${d.quantidade} × ` : ''}${fmt(d.valor)}</b></div>`).join('') || '<p class="muted small">Sem consumo registrado.</p>'}`;
+  }
+  if (r.pixCopyPaste) {
+    return `<div class="kv"><span>PIX copia e cola</span><b class="small" style="word-break:break-all">${ddEsc(r.pixCopyPaste)}</b></div>
+      <div class="btn-row mt-2"><button class="btn btn-ghost small" data-url="${ddEsc(r.pixCopyPaste)}" onclick="UI.soaCopiarPix(this)">Copiar código PIX</button></div>
+      ${r.instrucoes ? `<div class="kv"><span>Link de pagamento</span><b class="small" style="word-break:break-all">${ddEsc(r.instrucoes)}</b></div>
+        <div class="btn-row mt-2"><button class="btn btn-ghost small" data-url="${ddEsc(r.instrucoes)}" onclick="UI.lupaAbrirPix(this)">Abrir link de pagamento</button></div>` : ''}
+      ${r.expiraEm ? `<div class="kv"><span>Expira em</span><b>${ddEsc(r.expiraEm)}</b></div>` : ''}`;
+  }
+  return ddBloque(r);
+}
+
+async function consultarSoa() {
+  const s = soaServicoAtual();
+  const el = $('soa-result');
+  const body = {};
+  const doc = ($('soaDoc')?.value || '').replace(/\D/g, '');
+  if (s.doc) {
+    if (doc.length !== s.doc) return alert(`Informe ${s.doc === 11 ? 'o CPF (11 dígitos)' : 'o CNPJ (14 dígitos)'}.`);
+    body.documento = doc;
+  }
+  const uf = ($('soaUf')?.value || '').toUpperCase().trim();
+  if (s.uf) {
+    if (!/^[A-Z]{2}$/.test(uf)) return alert('Informe a UF (2 letras).');
+    body.uf = uf;
+  }
+  if (s.uf || s.v.startsWith('concentre')) body.adicionais = [1, 2, 3, 4];
+  const nasc = ($('soaNasc')?.value || '').trim();
+  if (s.nasc && /^\d{4}-\d{2}-\d{2}$/.test(nasc)) body.dataNascimento = nasc;
+  const valor = Number(($('soaValor')?.value || '').replace(/\./g, '').replace(',', '.'));
+  if (s.valor) {
+    if (!(valor > 0)) return alert('Informe o valor (R$) desta frente.');
+    body.valorOperacao = valor;
+    if (s.v === 'recarga-pix') { delete body.valorOperacao; body.valor = valor; }
+    if (s.v.startsWith('recomenda')) { body.tipoVenda = 1; body.politica = 1; }
+  }
+  const unique = ($('soaUnique')?.value || '').trim();
+  if (s.unique) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(unique)) return alert('uniqueID inválido (UUID).');
+    body.uniqueID = unique;
+  }
+  if (s.condicao) body.condicao = Number($('soaCondicao')?.value || 1);
+  if (s.mutacao && !$('soaConfirmar')?.checked) return alert('Marque a confirmação para executar uma frente de escrita.');
+  if (s.baixa) {
+    body.codigoBaixa = Number(($('soaBaixa')?.value || '0'));
+    if (!Number.isInteger(body.codigoBaixa) || body.codigoBaixa <= 0) return alert('Informe o código de baixa (1 a 9) — use "Códigos de restrição e baixa".');
+    body.dataBaixa = new Date().toISOString().slice(0, 10);
+  }
+  if (s.incluir) {
+    const venc = ($('soaIxVencimento')?.value || '').trim();
+    const valorRest = Number(($('soaIxValor')?.value || '').replace(/\./g, '').replace(',', '.'));
+    const codigoRest = ($('soaIxCodigo')?.value || '').trim();
+    if (!codigoRest) return alert('Informe o código da restrição.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(venc)) return alert('Informe a data de vencimento do título.');
+    if (!(valorRest > 0)) return alert('Informe o valor devido (R$).');
+    const docV = ($('soaIvDoc')?.value || '').replace(/\D/g, '');
+    if (docV.length !== 11 && docV.length !== 14) return alert('Informe o CPF (11) ou CNPJ (14) do devedor.');
+    const nomeV = ($('soaIvNome')?.value || '').trim();
+    if (!nomeV) return alert('Informe o nome ou a razão social do devedor.');
+    const ufV = ($('soaIvUf')?.value || '').toUpperCase().trim();
+    if (!/^[A-Z]{2}$/.test(ufV)) return alert('Informe a UF do endereço do devedor.');
+    body.confirmar = true;
+    body.devedores = [{
+      documento: docV,
+      tipoDevedor: docV.length === 14 ? 2 : 1,
+      nome: nomeV,
+      endereco: {
+        logradouro: ($('soaIvLogra')?.value || '').trim(),
+        numero: ($('soaIvNumero')?.value || '').trim(),
+        bairro: ($('soaIvBairro')?.value || '').trim(),
+        cidade: ($('soaIvCidade')?.value || '').trim(),
+        estado: ufV,
+        cep: ($('soaIvCep')?.value || '').replace(/\D/g, ''),
+      },
+    }];
+    body.restricao = {
+      codigoRestricao: codigoRest,
+      contrato: ($('soaIxContrato')?.value || '').trim(),
+      nossoNumero: ($('soaIxNosso')?.value || '').trim(),
+      dataVencimento: venc,
+      valor: valorRest,
+    };
+  } else if (s.mutacao) body.confirmar = true;
+
+  el.innerHTML = '<p class="muted">Consultando a base de risco...</p>';
+  try {
+    const data = await api(`/integracao/soa?acao=${s.v}`, { method: 'POST', body: JSON.stringify(body) });
+    let corpo;
+    if (s.v.startsWith('negativacao')) corpo = soaRenderNegativacao(data);
+    else if (s.v === 'recarga-pix' || s.v.startsWith('extrato') || s.v === 'saldo') corpo = soaRenderAdmin(data);
+    else if (s.v.startsWith('recomenda')) corpo = lupaRecomendaHtml(data);
+    else if (s.v.startsWith('cdc')) corpo = ddBloque(data.resumo);
+    else corpo = lupaRiscoHtml(data, s.t);
+    el.innerHTML = `<h4>${ddEsc(s.t)}</h4>${corpo}${soaRodape(data)}${serproDetalhes(data)}`;
+  } catch (e) {
+    el.innerHTML = soaErro(e);
+  }
+}
+
+async function soaCatalogos() {
+  const el = $('soa-result');
+  el.innerHTML = '<p class="muted">Lendo os códigos de restrição e de baixa...</p>';
+  try {
+    const [t, b] = await Promise.all([
+      api('/integracao/soa?acao=negativacao-tipos', { method: 'POST', body: '{}' }),
+      api('/integracao/soa?acao=negativacao-baixas', { method: 'POST', body: '{}' }),
+    ]);
+    const tipos = (t.resumo?.tipos || []).map((x) => `<div class="kv"><span>${ddEsc(x.codigoRestricao ?? '—')}</span><b>${ddEsc(x.restricaoDescricao || '')}</b></div>`).join('');
+    const baixas = (b.resumo?.codigosBaixa || []).map((x) => `<div class="kv"><span>${ddEsc(x.codigoBaixa ?? x.codigo ?? '—')}</span><b>${ddEsc(x.descricao || x.baixaDescricao || '')}</b></div>`).join('');
+    el.innerHTML = `<h4>Códigos disponíveis na conta</h4>
+      ${tipos ? `<div class="dd-sub">Restrições</div>${tipos}` : ''}
+      ${baixas ? `<div class="dd-sub">Baixas</div>${baixas}` : ''}
+      ${!(tipos + baixas) ? '<p class="muted small">O provedor não devolveu nenhum código para esta conta.</p>' : ''}
+      ${soaRodape(t)}`;
+  } catch (e) {
+    el.innerHTML = soaErro(e);
+  }
+}
+
+function soaCopiarPix(btn) {
+  const codigo = btn?.dataset?.url || '';
+  if (!codigo) return;
+  navigator.clipboard?.writeText(codigo)
+    .then(() => { btn.textContent = 'Código copiado'; })
+    .catch(() => { btn.textContent = 'Copie manualmente o código acima'; });
+}
+
+async function soaSaldo() {
+  const el = $('soa-result');
+  el.innerHTML = '<p class="muted">Lendo o saldo da conta...</p>';
+  try {
+    const data = await api('/integracao/soa?acao=saldo', { method: 'POST', body: '{}' });
+    el.innerHTML = `<h4>Saldo da conta de risco</h4>${soaRenderAdmin(data)}${soaRodape(data)}${serproDetalhes(data)}`;
+  } catch (e) {
+    el.innerHTML = soaErro(e);
+  }
+}
+
+async function soaExtrato() {
+  const el = $('soa-result');
+  el.innerHTML = '<p class="muted">Montando o extrato do mês...</p>';
+  try {
+    const data = await api('/integracao/soa?acao=extrato-sintetico', { method: 'POST', body: '{}' });
+    el.innerHTML = `<h4>Extrato de consumo (mês corrente)</h4>${soaRenderAdmin(data)}${soaRodape(data)}${serproDetalhes(data)}`;
+  } catch (e) {
+    el.innerHTML = soaErro(e);
+  }
+}
+
+function soaPreencherServicos() {
+  const sel = $('soaServico');
+  if (!sel || sel.options.length) return;
+  sel.innerHTML = SOA_SERVICOS.map((s) => `<option value="${s.v}">${ddEsc(s.t)}${s.custo ? ` · ${fmt(s.custo)}` : ''}</option>`).join('');
+  soaServicoChange();
+}
+
+function soaErro(e) {
+  const code = e.code || e.data?.code || '';
+  const checkout = e.data?.checkout_url || e.data?.error?.checkout_url;
+  const orderNsu = e.data?.order_nsu || e.data?.error?.order_nsu;
+  let h = `<p class="form-error">${ddEsc(lupaNeutro(e.message) || 'A base de risco não retornou dados agora.')}</p>`;
+  if (checkout && orderNsu) {
+    h += `<button class="btn btn-gradient small mt-3" data-url="${ddEsc(checkout)}" onclick="UI.lupaAbrirPix(this)">Pagar PIX para liberar</button>
+      <button class="btn btn-ghost small mt-2" data-order="${ddEsc(orderNsu)}" onclick="UI.soaAposPagamento(this)">Já paguei — conferir</button>`;
+  } else if (code === 'SALDO_INSUFICIENTE') {
+    h += '<p class="muted small mt-2">Saldo da conta de consultas esgotado — use a recarga PIX do painel ou a cobrança acima.</p>';
+  } else if (code === 'SOA_NAO_CONFIGURADO') {
+    h += '<p class="muted small mt-2">Enquanto as credenciais do bureau não estiverem salvas no cofre, as frentes de score ficam indisponíveis; o retrato cadastral oficial continua funcionando.</p>';
+  }
+  return h;
+}
+
+async function soaAposPagamento(btn) {
+  const el = $('soa-result');
+  el.innerHTML = '<p class="muted">Confirmando o pagamento...</p>';
+  try {
+    const r = await api('/integracao/apibrasil?acao=pagar-consulta', {
+      method: 'POST', body: JSON.stringify({ order_nsu: btn.dataset.order }),
+    });
+    el.innerHTML = `<h4>Consulta liberada</h4>${lupaRiscoHtml(r, 'Risco')}${soaRodape(r)}${serproDetalhes(r)}`;
+  } catch (e) {
+    el.innerHTML = soaErro(e);
+  }
+}
+
 // ---------- APIBrasil ----------
 function renderApibrasil(data, cnpj, el) {
   const c = data.dados?.cnpj || {};
@@ -2007,7 +2280,7 @@ async function consultarSerpro() {
 // BUSCA ÚNICA — uma lupa, todas as bases (nomes de fornecedores
 // ficam no backend; o cliente vê só o retrato completo)
 // ============================================================
-const LUPA = { doc: '', tipo: '', secoes: [], memo: {} };
+const LUPA = { doc: '', tipo: '', secoes: [], memo: {}, campos: { uf: '', valorOperacao: '' } };
 
 // Cada frente reusa a mesma chamada: um único número digitado = uma consulta por base.
 function lupaMemo(key, factory) {
@@ -2230,6 +2503,142 @@ async function lupaRunNfe(doc) {
   return serproRenderNfe(d.resumo, lupaFonteGen(d, 'Documento fiscal · base oficial'));
 }
 
+// ---- Frentes de risco de crédito (bureau) ----
+const SERASA_PRODUTOS = {
+  crednet: { custo: 16.06, rotulo: 'Score e Negativas', sub: 'score, dívidas, protestos, cheques e ações judiciais' },
+  concentra: { custo: 33.87, rotulo: 'Passivo Concentrado', sub: 'dívidas concentradas do sistema financeiro' },
+};
+
+function lupaPct(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '—';
+  return `${(n <= 1 ? n * 100 : n).toFixed(1).replace('.', ',')}%`;
+}
+
+function lupaScoreCor(p) {
+  const n = Number(p);
+  if (!Number.isFinite(n)) return 'var(--text-primary)';
+  return n >= 700 ? '#059669' : n >= 400 ? '#d97706' : '#b91c1c';
+}
+
+function lupaFrentesHtml(frentes) {
+  const entradas = Object.entries(frentes || {});
+  if (!entradas.length) return '';
+  return `<div class="dd-sub">Negativas por frente</div>` + entradas.map(([rotulo, f]) => {
+    const valor = Number(f.valor) > 0 ? ` · ${fmt(f.valor)}` : '';
+    return `<div class="kv"><span>${ddEsc(rotulo)}</span><b>${Number(f.total) || 0}${ddEsc(valor)}</b></div>`;
+  }).join('');
+}
+
+function lupaOcorrenciasHtml(frentes) {
+  const linhas = [];
+  for (const [rotulo, f] of Object.entries(frentes || {})) {
+    for (const it of (f.itens || []).slice(0, 6)) {
+      linhas.push(`<tr><td>${ddEsc(rotulo)}</td><td>${ddEsc(fmtDataBr(it.dataOcorrencia) || '—')}</td><td>${ddEsc(it.credor || it.cartorio || it.nomeBanco || '—')}</td><td>${ddEsc(it.modalidade || '')}</td><td>${Number(it.valor) ? fmt(it.valor) : '—'}</td></tr>`);
+    }
+  }
+  if (!linhas.length) return '';
+  return `<details class="mt-2"><summary class="muted small">Ver ocorrências detalhadas (${linhas.length})</summary>
+    <div class="table-wrap mt-2"><table class="table small"><thead><tr><th>Frente</th><th>Data</th><th>Credor/cartório</th><th>Modalidade</th><th>Valor</th></tr></thead><tbody>${linhas.join('')}</tbody></table></div></details>`;
+}
+
+function lupaRiscoHtml(d, rotulo) {
+  const s = d.resumo || {};
+  const sc = s.score || null;
+  const lc = s.limiteCredito || null;
+  const cab = sc ? `<div class="lupa-status">
+      <span>Score <b style="color:${lupaScoreCor(sc.pontuacao)}">${sc.pontuacao ?? '—'}</b></span>
+      <span>Faixa <b>${ddEsc(sc.faixa || '—')}</b></span>
+      <span>Inadimplência prevista <b>${ddEsc(lupaPct(sc.probabilidadeInadimplencia))}</b></span>
+    </div>` : `<div class="lupa-status"><span>${ddEsc(rotulo)}</span><b>${s.restricoes ? 'com restrições ativas' : 'sem restrições ativas'}</b></div>`;
+  const crit = lc?.criterios ? `<div class="dd-sub">Critérios analisados</div>
+    <p class="muted small">${[
+      lc.criterios.documentoAtivo && 'documento ativo',
+      lc.criterios.semRestricoes && 'sem restrições',
+      lc.criterios.semProtestos && 'sem protestos',
+      lc.criterios.baixoComprometimentoRenda && 'renda compatível',
+    ].filter(Boolean).join(' · ') || 'nenhum critério aprovado'}</p>` : '';
+  const total = Number(s.negativos?.total) || 0;
+  return `
+    ${cab}
+    <div class="kv"><span>Nome na base de risco</span><b>${ddEsc(s.nome || '—')}</b></div>
+    ${s.tipo === 'PJ' ? `<div class="kv"><span>Fundação</span><b>${ddEsc(s.fundacao || '—')}</b></div>` : `<div class="kv"><span>Nascimento</span><b>${ddEsc(s.nascimento || '—')}</b></div>`}
+    <div class="kv"><span>Situação no órgão emissor</span><b>${ddEsc(s.situacaoDescricao || s.situacaoRfb || '—')}</b></div>
+    <div class="kv"><span>Total de negativas</span><b>${total}${s.negativos?.valor ? ` · ${fmt(s.negativos.valor)}` : ''}</b></div>
+    ${lupaFrentesHtml(s.frentes)}
+    ${lc ? `<div class="dd-sub">Limite sugerido pela base de risco</div>
+      <div class="kv"><span>Limite de crédito</span><b>${fmt(lc.valor)}</b></div>
+      <div class="kv"><span>Recomendação</span><b>${ddEsc(lc.tipoRecomendacao || '—')}${lc.tipoRecomendacaoValor ? ` · ${fmt(lc.tipoRecomendacaoValor)}` : ''}</b></div>` : ''}
+    ${crit}
+    ${s.documentosRoubados?.length ? `<div class="kv"><span>Documentos comunicados como roubados</span><b>${s.documentosRoubados.length}</b></div>` : ''}
+    ${s.registroConsultas?.total ? `<div class="kv"><span>Consultas registradas na base</span><b>${s.registroConsultas.total}</b></div>` : ''}
+    ${sc?.mensagem ? `<p class="muted small mt-2">${ddEsc(sc.mensagem)}</p>` : ''}
+    ${lupaOcorrenciasHtml(s.frentes)}
+    <p class="muted small mt-2">Ambiente ${ddEsc(lupaNeutro(String(d.ambiente || '')) || 'de dados')} · custo por consulta ${fmt(d.custo || 0)}</p>`;
+}
+
+function lupaRecomendaHtml(d) {
+  const s = d.resumo || {};
+  const sc = s.score || null;
+  return `
+    <div class="lupa-status">
+      <span>Score <b style="color:${lupaScoreCor(sc?.pontuacao)}">${ddEsc(sc?.pontuacao ?? '—')}</b></span>
+      <span>Limite recomendado <b>${fmt(s.limiteRecomendado)}</b></span>
+      <span>Risco <b>${ddEsc(s.tipoRecomendacao || '—')}</b></span>
+    </div>
+    <div class="kv"><span>Nome na base de risco</span><b>${ddEsc(s.nome || '—')}</b></div>
+    ${s.nascimento ? `<div class="kv"><span>Nascimento</span><b>${ddEsc(s.nascimento)}</b></div>` : ''}
+    ${s.fundacao ? `<div class="kv"><span>Fundação</span><b>${ddEsc(s.fundacao)}</b></div>` : ''}
+    ${s.situacaoCpf ? `<div class="kv"><span>Situação do documento</span><b>${ddEsc(s.situacaoCpf)}</b></div>` : ''}
+    ${s.faixaRenda ? `<div class="kv"><span>Renda estimada</span><b>${fmt(s.faixaRenda)}</b></div>` : ''}
+    ${s.numeroProposta ? `<div class="kv"><span>Proposta</span><b>${ddEsc(s.numeroProposta)}</b></div>` : ''}
+    <div class="kv"><span>Ocorrências negativas</span><b>${s.temNegativas ? 'sim' : 'não'}</b></div>
+    ${s.datasNegativas?.dividasVencidas ? `<div class="kv"><span>Dívida vencida mais recente</span><b>${ddEsc(s.datasNegativas.dividasVencidas)}</b></div>` : ''}
+    ${s.datasNegativas?.protestos ? `<div class="kv"><span>Protesto mais recente</span><b>${ddEsc(s.datasNegativas.protestos)}</b></div>` : ''}
+    <div class="kv"><span>Consultas nos últimos 3 meses</span><b>${s.consultas?.m3 ?? s.consultas?.total ?? '—'}</b></div>
+    ${s.mensagemScore ? `<p class="muted small mt-2">${ddEsc(s.mensagemScore)}</p>` : ''}
+    <p class="muted small mt-2">Custo por consulta ${fmt(d.custo || 0)} · consulta de crédito sob demanda</p>`;
+}
+
+async function lupaRunBureau(opBase, doc, corpo) {
+  const tipo = String(doc).length === 14 ? 'pj' : 'pf';
+  const d = await api(`/integracao/soa?acao=${opBase}-${tipo}`, {
+    method: 'POST',
+    body: JSON.stringify({ documento: doc, ...(corpo || {}) }),
+  });
+  return lupaRiscoHtml(d, SERASA_PRODUTOS[opBase]?.rotulo || 'Risco');
+}
+
+function lupaGatilhoUf(id) {
+  return `<p class="muted small">Esta frente exige a UF do documento.</p>
+    <div class="search-row mt-2"><input class="field" id="lupaUf" maxlength="2" placeholder="UF (ex: PE)">
+    <button class="btn btn-gradient" onclick="UI.lupaExecutar('${id}')">Consultar</button></div>`;
+}
+
+async function lupaRunCrednet(doc) {
+  const uf = String(LUPA.campos.uf || $('lupaUf')?.value || '').toUpperCase().trim();
+  if (!/^[A-Z]{2}$/.test(uf)) throw Object.assign(new Error('Informe a UF do documento (2 letras).'), { code: 'UF_INVALIDA' });
+  return lupaRunBureau('crednet', doc, { uf, adicionais: [1, 2, 3, 4] });
+}
+
+function lupaGatilhoRecomenda() {
+  return `<p class="muted small">Informe o valor da operação para receber o limite recomendado.</p>
+    <div class="search-row mt-2"><input class="field" id="lupaValorOperacao" inputmode="decimal" placeholder="Valor da operação (R$)">
+    <button class="btn btn-gradient" onclick="UI.lupaExecutar('recomenda')">Consultar</button></div>`;
+}
+
+async function lupaRunRecomenda(doc) {
+  const bruto = String(LUPA.campos.valorOperacao || $('lupaValorOperacao')?.value || '').replace(/\./g, '').replace(',', '.');
+  const valor = Number(bruto);
+  if (!(valor > 0)) throw Object.assign(new Error('Informe o valor da operação em reais.'), { code: 'VALOR_OPERACAO_INVALIDO' });
+  const tipo = String(doc).length === 14 ? 'pj' : 'pf';
+  const d = await api(`/integracao/soa?acao=recomenda-${tipo}`, {
+    method: 'POST',
+    body: JSON.stringify({ documento: doc, valorOperacao: valor, tipoVenda: 1, politica: 1 }),
+  });
+  return lupaRecomendaHtml(d);
+}
+
 function lupaSecoes(tipo, doc) {
   if (tipo === 'cnpj') return [
     { id: 'cad', ico: '🏢', t: 'Cadastro Empresarial', sub: 'Receita Federal · dados oficiais completos', run: () => lupaRunCnpjOficial(doc) },
@@ -2237,6 +2646,9 @@ function lupaSecoes(tipo, doc) {
     { id: 'risco', ico: '🛡️', t: 'Verificação de Risco', sub: 'score e consistência cadastral', run: () => lupaRunRisco(doc, 'pj', () => lupaIndiceCnpj(doc)) },
     { id: 'big', ico: '🗂️', t: 'Big Data Cadastral', sub: 'base ampliada de pessoa jurídica · consulta sob demanda', custo: 0.16, auto: false, run: lupaRunDD('CadastroPessoaJuridica', 'Cnpj', doc) },
     { id: 'credito', ico: '💳', t: 'Análise Creditícia', sub: 'cadastral + sócios por crédito · consulta sob demanda', custo: 0.04, auto: false, run: () => lupaRunCredito(doc) },
+    { id: 'score', ico: '📊', t: SERASA_PRODUTOS.crednet.rotulo, sub: SERASA_PRODUTOS.crednet.sub, custo: SERASA_PRODUTOS.crednet.custo, auto: false, gatilho: lupaGatilhoUf('score'), run: () => lupaRunCrednet(doc) },
+    { id: 'passivo', ico: '🧮', t: SERASA_PRODUTOS.concentra.rotulo, sub: SERASA_PRODUTOS.concentra.sub, custo: SERASA_PRODUTOS.concentra.custo, auto: false, run: () => lupaRunBureau('concentre', doc, { adicionais: [1, 2, 3, 4] }) },
+    { id: 'recomenda', ico: '🎯', t: 'Limite de Crédito Recomendado', sub: 'quanto a base empresta · exige valor da operação', custo: 24, auto: false, gatilho: lupaGatilhoRecomenda(), run: () => lupaRunRecomenda(doc) },
   ];
   if (tipo === 'cpf') return [
     { id: 'basico', ico: '👤', t: 'Validação do Documento', sub: 'estrutura e dígitos verificadores', run: () => lupaRunCpfBasico(doc) },
@@ -2246,6 +2658,9 @@ function lupaSecoes(tipo, doc) {
     { id: 'divida', ico: '⚖️', t: 'Dívida Ativa da União', sub: 'inscrições, valores e situação', run: () => lupaRunDivida(doc) },
     { id: 'risco', ico: '🛡️', t: 'Verificação de Risco', sub: 'score e consistência cadastral', run: () => lupaRunRisco(doc, 'pf', () => lupaIndiceCpf(doc)) },
     { id: 'big', ico: '🗂️', t: 'Big Data Cadastral', sub: 'base ampliada de pessoa física · consulta sob demanda', custo: 0.16, auto: false, run: lupaRunDD('CadastroPessoaFisica', 'Cpf', doc) },
+    { id: 'score', ico: '📊', t: SERASA_PRODUTOS.crednet.rotulo, sub: SERASA_PRODUTOS.crednet.sub, custo: SERASA_PRODUTOS.crednet.custo, auto: false, gatilho: lupaGatilhoUf('score'), run: () => lupaRunCrednet(doc) },
+    { id: 'passivo', ico: '🧮', t: SERASA_PRODUTOS.concentra.rotulo, sub: SERASA_PRODUTOS.concentra.sub, custo: SERASA_PRODUTOS.concentra.custo, auto: false, run: () => lupaRunBureau('concentre', doc, { adicionais: [1, 2, 3, 4] }) },
+    { id: 'recomenda', ico: '🎯', t: 'Limite de Crédito Recomendado', sub: 'quanto a base empresta · exige valor da operação', custo: 24, auto: false, gatilho: lupaGatilhoRecomenda(), run: () => lupaRunRecomenda(doc) },
   ];
   if (tipo === 'cep') return [
     { id: 'ender', ico: '📍', t: 'Endereço Completo', sub: 'logradouro, bairro, cidade e UF', run: () => lupaRunCep(doc) },
@@ -2340,6 +2755,8 @@ async function buscaUnica() {
 async function lupaExecutar(id) {
   const s = LUPA.secoes.find((x) => x.id === id);
   if (!s) return;
+  // O esqueleto apaga o gatilho: os valores digitados precisam ser lidos antes
+  LUPA.campos = { uf: $('lupaUf')?.value || '', valorOperacao: $('lupaValorOperacao')?.value || '' };
   $('lupa-b-' + id).innerHTML = '<div class="lupa-skeleton"><i></i><i></i><i></i></div>';
   try { $('lupa-b-' + id).innerHTML = await s.run(); }
   catch (e) { $('lupa-b-' + id).innerHTML = lupaErro(e, id); }
@@ -2354,6 +2771,7 @@ const UI = {
   consultarSerasa, consultarApibrasil, apibrasilSaldo,
   consultarDirectdata, ddEndpointChange,
   consultarSerpro, serproServicoChange, baixarCndPdf,
+  consultarSoa, soaServicoChange, soaSaldo, soaExtrato, soaAposPagamento, soaCopiarPix, soaCatalogos,
   buscaUnica, lupaDetectarChange, lupaExecutar, lupaAbrirPix,
   carregarSaldoZapsign, toggleCertForm, criarCertificado, carregarProtocolos,
   enviarChat, analisarNotaIA, alterarUser, removerUser,
@@ -2367,6 +2785,7 @@ function init() {
   initBackground($('bg-3d'));
   ddInit();
   serproServicoChange();
+  soaPreencherServicos();
 
   // Navegação
   document.querySelectorAll('.nav-btn').forEach((b) => b.addEventListener('click', () => {

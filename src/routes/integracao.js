@@ -7,6 +7,7 @@ import { serpro, serproEnabled } from '../lib/serpro.js';
 import { serasaEnabled, verificarPessoa, verificarEmpresa, normalizarVerificacao } from '../lib/serasa.js';
 import { apibrasilEnabled, saldo as apibrasilSaldo, consultarCnpj as apibrasilConsultarCnpj } from '../lib/apibrasil.js';
 import { directdataEnabled, consultar as directdataConsultar, validarEndpoint } from '../lib/directdata.js';
+import { soaEnabled, soaRequest, soaBase, soaAmbiente, SOA_OPS, normalizarSerasa, normalizarSaldo, normalizarExtrato, normalizarRecomenda, normalizarCdc } from '../lib/soa.js';
 import { infinitepayEnabled, criarLinkCheckout, consultarPagamento } from '../lib/infinitepay.js';
 import { calcularFiscal } from '../lib/fiscal.js';
 
@@ -20,6 +21,7 @@ export async function handleStatus(env) {
     { nome: 'ZapSign Certificados', status: zapsignEnabled(env) ? 'online' : 'pendente', detalhe: zapsignEnabled(env) ? 'Chave configurada' : 'Defina ZAPSIGN_API_KEY' },
     { nome: 'Serpro PIN/IA', status: serproEnabled(env) ? 'online' : 'pendente', detalhe: serproEnabled(env) ? 'Credenciais configuradas' : 'Assinatura em loja.serpro.gov.br' },
     { nome: 'Serasa Experian (Verify PF/PJ)', status: serasaEnabled(env) ? 'online' : 'pendente', detalhe: serasaEnabled(env) ? 'Token configurado' : 'Defina SERASA_TOKEN' },
+    { nome: 'Serasa Experian (consultas completas)', status: soaEnabled(env) ? 'online' : 'pendente', detalhe: soaEnabled(env) ? `Ambiente ${soaAmbiente(env) === 'homolog' ? 'homologação' : 'produção'} · credenciais configuradas` : 'Defina os secrets SOA_EMAIL e SOA_SENHA' },
     { nome: 'APIBrasil (Dados CNPJ)', status: apibrasilEnabled(env) ? 'online' : 'pendente', detalhe: apibrasilEnabled(env) ? 'Token configurado' : 'Defina APIBRASIL_TOKEN' },
     { nome: 'DirectData (Big Data)', status: directdataEnabled(env) ? 'online' : 'pendente', detalhe: directdataEnabled(env) ? 'Token configurado' : 'Defina DIRECTDATA_TOKEN' },
     { nome: 'PGFN Dívida Ativa (Regularize)', status: serproEnabled(env) ? 'online' : 'pendente', detalhe: serproEnabled(env) ? 'API Serpro configurada' : 'API em loja.serpro.gov.br/consulta-divida-ativa · portal Regularize disponível' },
@@ -1291,6 +1293,21 @@ export async function handleApibrasil(env, request) {
       return ok({ pago: true, dados: r2.dados, balance: r2.balance, valorConsulta: r2.valorConsulta, fonte: 'APIBrasil' });
     }
 
+    if (pg.tipo === 'soa') {
+      const r2 = await executarSoa(env, params.opKey || 'saldo', params.body || {});
+      if (!r2.ok) {
+        await audit(env, { userId: auth.user.id, email: auth.user.email, acao: 'SOA_CONSULTA_FALHA', detalhe: `${params.opKey} ${r2.code || ''}`, ip: getIp(request) });
+        return json({
+          ...r2,
+          message: r2.code === 'SALDO_INSUFICIENTE'
+            ? 'Pagamento aprovado! Mas o saldo do provedor de risco continua esgotado — a recarga libera esta consulta.'
+            : (r2.message || 'Falha ao executar a consulta paga.'),
+        }, r2.code === 'SALDO_INSUFICIENTE' ? 402 : 502);
+      }
+      await audit(env, { userId: auth.user.id, email: auth.user.email, acao: 'SOA_CONSULTA', detalhe: `${params.opKey} (paga)`, ip: getIp(request) });
+      return ok({ pago: true, op: params.opKey, resumo: r2.resumo, detalhes: r2.dados, ambiente: r2.ambiente, custo: r2.custo, fonte: r2.fonte });
+    }
+
     return err('Tipo de consulta não suportado para reexecução.', 400, 'TIPO_INVALIDO');
   }
 
@@ -1358,4 +1375,244 @@ export async function handleDirectdata(env, request) {
   }
 
   return err('Ação inválida (use consultar).', 400, 'ACAO_INVALIDA');
+}
+
+// ============ SOA WEB SERVICES (CONSULTAS SERASA EXPERIAN) ============
+
+const SOA_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SOA_DATA_RE = /^\d{4}-\d{2}-\d{2}$/;
+const SOA_CONDICOES = [0, 1, 2, 3, 4, 6, 7, 9];
+
+const SOA_ADICIONAIS_VALIDOS = [1, 2, 3, 4];
+
+// 1 = Quadro de sócios, 2 = Participações, 3 = Risk score, 4 = Limite de crédito
+function soaAdicionais(valor) {
+  if (!Array.isArray(valor)) return [];
+  return [...new Set(valor.map((x) => Number(x)).filter((x) => SOA_ADICIONAIS_VALIDOS.includes(x)))];
+}
+
+function soaDoc(op, valor) {
+  const doc = onlyNumbers(valor);
+  const esperado = op.doc === 11 ? /^\d{11}$/ : /^\d{14}$/;
+  // Validação por tamanho: documentos de teste do ambiente de homologação não têm dígito verificador válido
+  if (!esperado.test(doc)) return { erro: `Documento inválido (${op.doc} dígitos).`, code: op.doc === 11 ? 'CPF_INVALIDO' : 'CNPJ_INVALIDO' };
+  return { doc };
+}
+
+// Monta o corpo da requisição a partir do payload da rota, com sanitização por operação
+export function montarPayloadSoa(opKey, body = {}) {
+  const op = SOA_OPS[opKey];
+  if (!op) return { erro: 'Operação de risco inválida.', code: 'OPER_INVALIDA' };
+  const p = {};
+
+  if (opKey === 'extrato-sintetico' || opKey === 'extrato-analitico') {
+    const agora = new Date();
+    const ano = Number(body.ano || agora.getUTCFullYear());
+    const mes = Number(body.mes || agora.getUTCMonth() + 1);
+    if (!Number.isInteger(ano) || ano < 2020 || ano > 2100) return { erro: 'Ano inválido.', code: 'ANO_INVALIDO' };
+    if (!Number.isInteger(mes) || mes < 1 || mes > 12) return { erro: 'Mês inválido (1-12).', code: 'MES_INVALIDO' };
+    return { payload: { ano, mes } };
+  }
+
+  if (opKey === 'saldo' || opKey === 'negativacao-tipos' || opKey === 'negativacao-baixas') return { payload: p };
+
+  if (opKey === 'recarga-pix') {
+    if (body.confirmar !== true) return { erro: 'Confirme a recarga para gerar o PIX.', code: 'CONFIRMACAO_OBRIGATORIA' };
+    const valor = Math.round(Number(body.valor || 0) * 100) / 100;
+    if (!(valor >= 10)) return { erro: 'Informe um valor de recarga a partir de R$ 10,00.', code: 'VALOR_INVALIDO' };
+    return { payload: { valor } };
+  }
+
+  if (opKey === 'negativacao-consultar' || opKey === 'negativacao-excluir') {
+    const uniqueID = String(body.uniqueID || '').trim();
+    if (!SOA_UUID_RE.test(uniqueID)) return { erro: 'uniqueID inválido (UUID da negativação).', code: 'UNIQUEID_INVALIDO' };
+    p.uniqueID = uniqueID;
+    if (opKey === 'negativacao-excluir') {
+      if (body.confirmar !== true) return { erro: 'Confirme a exclusão da negativação.', code: 'CONFIRMACAO_OBRIGATORIA' };
+      const codigoBaixa = Number(body.codigoBaixa || 0);
+      if (!Number.isInteger(codigoBaixa) || codigoBaixa <= 0) return { erro: 'Informe o código de baixa (veja a lista de códigos).', code: 'CODIGO_BAIXA_INVALIDO' };
+      if (!SOA_DATA_RE.test(body.dataBaixa || '')) return { erro: 'dataBaixa inválida (AAAA-MM-DD).', code: 'DATA_INVALIDA' };
+      p.codigoBaixa = codigoBaixa;
+      p.dataBaixa = String(body.dataBaixa);
+    }
+    return { payload: p };
+  }
+
+  if (opKey === 'negativacao-lista') {
+    const condicao = Number(body.condicao ?? 1);
+    if (!SOA_CONDICOES.includes(condicao)) return { erro: 'Condição inválida (0 pendentes, 1 ativas, 2 erro, 4 em processamento, 9 baixadas).', code: 'CONDICAO_INVALIDA' };
+    return { payload: { condicao } };
+  }
+
+  if (opKey === 'negativacao-inserir') {
+    if (body.confirmar !== true) return { erro: 'Confirme a inclusão: a negativação restringe o devedor no bureau.', code: 'CONFIRMACAO_OBRIGATORIA' };
+    const devedores = Array.isArray(body.devedores) ? body.devedores.slice(0, 5) : [];
+    if (!devedores.length) return { erro: 'Informe ao menos um devedor.', code: 'DEVEDORES_OBRIGATORIOS' };
+    const limpos = [];
+    for (const d of devedores) {
+      const documento = onlyNumbers(d?.documento);
+      if (!/^\d{11}$|^\d{14}$/.test(documento)) return { erro: 'Documento do devedor inválido (11 ou 14 dígitos).', code: 'DOCUMENTO_INVALIDO' };
+      limpos.push({
+        documento,
+        tipoDevedor: Number(d?.tipoDevedor) === 2 ? 2 : 1,
+        nome: String(d?.nome || '').slice(0, 120),
+        endereco: {
+          logradouro: String(d?.endereco?.logradouro || '').slice(0, 160),
+          numero: String(d?.endereco?.numero || '').slice(0, 20),
+          bairro: String(d?.endereco?.bairro || '').slice(0, 80),
+          cidade: String(d?.endereco?.cidade || '').slice(0, 80),
+          estado: String(d?.endereco?.estado || '').slice(0, 2).toUpperCase(),
+          cep: onlyNumbers(d?.endereco?.cep).slice(0, 8),
+          complemento: String(d?.endereco?.complemento || '').slice(0, 80),
+        },
+      });
+    }
+    const r = body.restricao || {};
+    const valor = Math.round(Number(r.valor || 0) * 100) / 100;
+    if (!SOA_DATA_RE.test(r.dataVencimento || '')) return { erro: 'dataVencimento da restrição inválida (AAAA-MM-DD).', code: 'DATA_INVALIDA' };
+    if (!(valor > 0)) return { erro: 'Valor da restrição deve ser maior que zero.', code: 'VALOR_INVALIDO' };
+    p.devedores = limpos;
+    p.restricao = {
+      codigoRestricao: String(r.codigoRestricao || '').slice(0, 12),
+      contrato: String(r.contrato || '').slice(0, 40),
+      nossoNumero: String(r.nossoNumero || '').slice(0, 40),
+      dataVencimento: String(r.dataVencimento),
+      valor,
+    };
+    return { payload: p };
+  }
+
+  // Consultas de documento (básica, CredNet, Concentre, Recomenda, CDC)
+  const d = soaDoc(op, body.documento);
+  if (d.erro) return { erro: d.erro, code: d.code };
+  p.documento = d.doc;
+
+  // O provedor exige uf + adicionais no CredNet e adicionais no Concentre (mesmo vazios)
+  if (opKey === 'crednet-pf' || opKey === 'crednet-pj') {
+    const uf = String(body.uf || '').toUpperCase();
+    if (!/^[A-Z]{2}$/.test(uf)) return { erro: 'Informe a UF do documento (2 letras) para esta frente.', code: 'UF_INVALIDA' };
+    p.uf = uf;
+    p.adicionais = soaAdicionais(body.adicionais);
+  }
+  if (opKey === 'concentre-pf' || opKey === 'concentre-pj') {
+    p.adicionais = soaAdicionais(body.adicionais);
+  }
+  if (opKey === 'recomenda-pf' || opKey === 'recomenda-pj') {
+    const valorOperacao = Math.round(Number(body.valorOperacao || 0) * 100) / 100;
+    if (!(valorOperacao > 0)) return { erro: 'Informe o valor da operação (Recomenda trabalha com limite de crédito).', code: 'VALOR_OPERACAO_INVALIDO' };
+    p.valorOperacao = valorOperacao;
+    p.tipoVenda = Number(body.tipoVenda) === 2 ? 2 : 1;
+    p.politica = Number(body.politica) === 2 ? 2 : 1;
+  }
+  if (/^cdc-pf/.test(opKey) && SOA_DATA_RE.test(body.dataNascimento || '')) p.dataNascimento = String(body.dataNascimento);
+
+  return { payload: p, documento: d.doc };
+}
+
+// Executa a operação e devolve o par {resumo, detalhes} já normalizado
+export async function executarSoa(env, opKey, body) {
+  const montado = montarPayloadSoa(opKey, body);
+  if (montado.erro) return { ok: false, code: montado.code, message: montado.erro, status: 400 };
+
+  const r = await soaRequest(env, opKey, montado.payload);
+  if (!r.ok) return r;
+
+  const fonte = `Serasa Experian - Consultas completas (${soaAmbiente(env) === 'homolog' ? 'homologação' : 'produção'})`;
+  if (opKey === 'saldo') return { ok: true, resumo: normalizarSaldo(r.data), dados: r.data, ambiente: r.ambiente, custo: null, fonte };
+  if (opKey.startsWith('extrato')) return { ok: true, resumo: normalizarExtrato(r.data), dados: r.data, ambiente: r.ambiente, custo: null, fonte };
+  if (opKey === 'recarga-pix') {
+    return {
+      ok: true,
+      resumo: {
+        pixCopyPaste: r.data.pixCopyPaste || '',
+        instrucoes: r.data.instructionsPaymentUrl || '',
+        expiraEm: r.data.expiresAt || '',
+        qrCodeSvg: r.data.pixQrCodeSVG || '',
+      },
+      dados: r.data, ambiente: r.ambiente, custo: null, fonte,
+    };
+  }
+  if (opKey.startsWith('negativacao')) {
+    return {
+      ok: true,
+      resumo: {
+        tipos: Array.isArray(r.data.tiposRestricoes) ? r.data.tiposRestricoes : [],
+        codigosBaixa: Array.isArray(r.data.codigosBaixa) ? r.data.codigosBaixa : [],
+        uniqueID: r.data.uniqueID || (montado.payload.uniqueID || ''),
+        credor: r.data.credor || null,
+        restricao: r.data.restricao || null,
+        situacao: r.data.restricaoStatus?.descricao || (r.data.restricaoStatus && Object.keys(r.data.restricaoStatus).length ? r.data.restricaoStatus : null),
+        baixa: r.data.codigoBaixa !== undefined || r.data.dataHoraExclusao
+          ? {
+            codigoBaixa: r.data.codigoBaixa ?? null,
+            baixaDescricao: r.data.baixaDescricao || '',
+            codigoRestricao: r.data.codigoRestricao ?? null,
+            restricaoDescricao: r.data.restricaoDescricao || '',
+            credor: r.data.nomeCredor || r.data.documentoCredor || '',
+            devedor: r.data.nomeDevedor || r.data.documentoDevedor || '',
+            valor: r.data.valor ?? null,
+            dataHoraExclusao: r.data.dataHoraExclusao || '',
+          }
+          : null,
+        inclusao: r.data.dataHoraInclusao || '',
+        devedores: Array.isArray(r.data.devedores) ? r.data.devedores : [],
+        erros: Array.isArray(r.data.negativacaoErros) ? r.data.negativacaoErros : [],
+        lista: Array.isArray(r.data.negativacoes) ? r.data.negativacoes : (Array.isArray(r.data) ? r.data : []),
+      },
+      dados: r.data, ambiente: r.ambiente, custo: null, fonte,
+    };
+  }
+  const resumo = opKey.startsWith('recomenda') ? normalizarRecomenda(r.data)
+    : opKey.startsWith('cdc') ? normalizarCdc(r.data)
+    : normalizarSerasa(r.data);
+  return { ok: true, resumo, dados: r.data, documento: montado.documento, ambiente: r.ambiente, custo: r.custo, fonte };
+}
+
+export async function handleSoa(env, request) {
+  const auth = await requireAuth(env, request);
+  if (auth.error) return auth.error;
+  if (!soaEnabled(env)) {
+    return json({
+      ok: false,
+      code: 'SOA_NAO_CONFIGURADO',
+      message: 'Consultas de risco ainda não liberadas: defina os secrets SOA_EMAIL e SOA_SENHA da conta do distribuidor (crie em soawebservices.com.br) e, para testar primeiro, SOA_AMBIENTE=homolog.',
+      ambiente: soaAmbiente(env),
+      endpointBase: soaBase(env),
+    }, 503);
+  }
+
+  const url = new URL(request.url);
+  const opKey = url.searchParams.get('acao') || 'saldo';
+  if (!SOA_OPS[opKey]) return err('Operação de risco desconhecida.', 400, 'OPER_INVALIDA');
+  if (!(await rateLimit(env, getIp(request), 'soa'))) return err('Limite de consultas de risco atingido.', 429, 'RATE_LIMIT');
+
+  const body = await readBody(request);
+  const r = await executarSoa(env, opKey, body);
+
+  if (!r.ok) {
+    await audit(env, { userId: auth.user.id, email: auth.user.email, acao: 'SOA_CONSULTA_FALHA', detalhe: `${opKey} ${r.code || ''} ${r.message || ''}`.slice(0, 200), ip: getIp(request) });
+    if (r.code === 'SALDO_INSUFICIENTE' && infinitepayEnabled(env) && SOA_OPS[opKey].custo) {
+      const cobranca = await criarCobrancaConsulta(env, request, auth.user, {
+        tipo: 'soa', consulta: opKey, parametros: { opKey, body },
+        valorConsulta: SOA_OPS[opKey].custo, descricao: 'Consulta IANF · retrato de risco',
+      });
+      if (cobranca) {
+        return json({
+          ok: false, code: 'SALDO_INSUFICIENTE',
+          message: 'Saldo do provedor de risco esgotado. Pague esta consulta via PIX para liberar.',
+          checkout_url: cobranca.checkout_url, order_nsu: cobranca.order_nsu,
+          valor: cobranca.valorCents / 100, valorCents: cobranca.valorCents,
+        }, 402);
+      }
+    }
+    const status = r.code === 'SOA_AUTH' ? 401 : r.status === 400 ? 400 : r.code === 'SALDO_INSUFICIENTE' ? 402 : 502;
+    return json({ ok: false, code: r.code, message: r.message, saldo: r.dados?.saldo ?? null, codigoStatus: r.codigoStatus ?? null }, status);
+  }
+
+  await audit(env, {
+    userId: auth.user.id, email: auth.user.email,
+    acao: SOA_OPS[opKey].mutacao ? 'SOA_ALTERACAO' : 'SOA_CONSULTA',
+    detalhe: `${opKey} ${r.resumo?.documento || r.resumo?.uniqueID || ''}`.slice(0, 200), ip: getIp(request),
+  });
+  return ok({ op: opKey, resumo: r.resumo, detalhes: r.dados, ambiente: r.ambiente, custo: r.custo, fonte: r.fonte });
 }
