@@ -76,7 +76,8 @@ async function post(env, path, body, retry = true) {
         return post(env, path, body, false);
       }
       if (res.status === 401 || code === '17') {
-        return { ok: false, code: 'SERASA_TOKEN_EXPIRADO', message: `Token Serasa inválido ou expirado. ${msg}`, serasaCode: code };
+        const dica = env.SERASA_CLIENT_ID ? '' : ' O acesso é liberado pela credencial client-identities que a Serasa Experian emite (representante comercial ou Central (11) 3003-7372); o JWT de sessão do portal não é aceito pelas APIs.';
+        return { ok: false, code: 'SERASA_TOKEN_EXPIRADO', message: `Token Serasa inválido ou expirado. ${msg}${dica}`, serasaCode: code };
       }
       return { ok: false, code: 'SERASA_ERRO', status: res.status, message: msg, serasaCode: code };
     }

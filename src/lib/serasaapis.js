@@ -322,7 +322,7 @@ export async function chamarSerasaApi(env, acao, body = {}, ambPedida = 'demo') 
   const ambientes = serasaAmbientesDisponiveis(env);
   const amb = ambientes.includes(ambPedida) ? ambPedida : ambientes[0];
   if (amb !== 'demo' && !serasaEnabled(env)) {
-    return { ok: false, code: 'SERASA_NAO_CONFIGURADO', message: 'Para sair da demonstração, defina os secrets SERASA_CLIENT_ID e SERASA_CLIENT_SECRET (client-identities do portal).' };
+    return { ok: false, code: 'SERASA_NAO_CONFIGURADO', message: 'Para sair da demonstração é preciso a credencial client-identities emitida pela Serasa Experian (representante comercial ou Central de Atendimento (11) 3003-7372). Com ela, defina os secrets SERASA_CLIENT_ID e SERASA_CLIENT_SECRET.' };
   }
 
   const doc = texto(body.document, 20).replace(/\D/g, '');

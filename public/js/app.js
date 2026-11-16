@@ -1356,7 +1356,7 @@ function soaErro(e) {
   } else if (code === 'SALDO_INSUFICIENTE') {
     h += '<p class="muted small mt-2">Saldo da conta de consultas esgotado — use a recarga PIX do painel ou a cobrança acima.</p>';
   } else if (code === 'SOA_NAO_CONFIGURADO') {
-    h += '<p class="muted small mt-2">Enquanto as credenciais do bureau não estiverem salvas no cofre, as frentes de score ficam indisponíveis; o retrato cadastral oficial continua funcionando.</p>';
+    h += '<p class="muted small mt-2">Enquanto as credenciais do bureau não estiverem salvas no cofre, as frentes de score ficam indisponíveis; o retrato cadastral oficial continua funcionando. A conta do distribuidor é criada em soawebservices.com.br/criar-conta (Central (11) 4560-7722), e a credencial da Serasa Experian é emitida pelo representante comercial ou pela Central de Atendimento (11) 3003-7372.</p>';
   }
   return h;
 }

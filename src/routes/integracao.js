@@ -24,8 +24,8 @@ export async function handleStatus(env) {
     { nome: 'Spedy (NF-e/NFS-e)', status: spedyEnabled(env) ? 'online' : 'pendente', detalhe: spedyEnabled(env) ? 'Chave configurada' : 'Defina SPEDY_API_KEY' },
     { nome: 'ZapSign Certificados', status: zapsignEnabled(env) ? 'online' : 'pendente', detalhe: zapsignEnabled(env) ? 'Chave configurada' : 'Defina ZAPSIGN_API_KEY' },
     { nome: 'Serpro PIN/IA', status: serproEnabled(env) ? 'online' : 'pendente', detalhe: serproEnabled(env) ? 'Credenciais configuradas' : 'Assinatura em loja.serpro.gov.br' },
-    { nome: 'Serasa Experian (Verify PF/PJ)', status: serasaEnabled(env) ? 'online' : 'pendente', detalhe: serasaEnabled(env) ? 'Token configurado' : 'Defina SERASA_TOKEN' },
-    { nome: 'Serasa Experian (consultas completas)', status: soaEnabled(env) ? 'online' : 'pendente', detalhe: soaEnabled(env) ? `Ambiente ${soaAmbiente(env) === 'homolog' ? 'homologação' : 'produção'} · credenciais configuradas` : 'Defina os secrets SOA_EMAIL e SOA_SENHA' },
+    { nome: 'Serasa Experian (Verify PF/PJ)', status: serasaEnabled(env) ? 'online' : 'pendente', detalhe: serasaEnabled(env) ? 'Credencial configurada' : 'Credencial client-identities emitida pela Serasa Experian · Central de Atendimento (11) 3003-7372' },
+    { nome: 'Serasa Experian (consultas completas)', status: soaEnabled(env) ? 'online' : 'pendente', detalhe: soaEnabled(env) ? `Ambiente ${soaAmbiente(env) === 'homolog' ? 'homologação' : 'produção'} · credenciais configuradas` : 'Criar conta em soawebservices.com.br/criar-conta · (11) 4560-7722' },
     { nome: 'Serasa Experian (APIs do portal)', status: 'online', detalhe: serasaEnabled(env) ? `${Object.keys(SERASA_SERVICOS).length} serviços · demonstração + sandbox + homologação + oficial` : `${Object.keys(SERASA_SERVICOS).length} serviços na demonstração pública · credenciais liberam homologação/oficial` },
     { nome: 'APIBrasil (Dados CNPJ)', status: apibrasilEnabled(env) ? 'online' : 'pendente', detalhe: apibrasilEnabled(env) ? 'Token configurado' : 'Defina APIBRASIL_TOKEN' },
     { nome: 'DirectData (Big Data)', status: directdataEnabled(env) ? 'online' : 'pendente', detalhe: directdataEnabled(env) ? 'Token configurado' : 'Defina DIRECTDATA_TOKEN' },
@@ -1116,7 +1116,7 @@ export async function handleSerasa(env, request) {
   const auth = await requireAuth(env, request);
   if (auth.error) return auth.error;
   if (!serasaEnabled(env)) {
-    return json({ ok: false, code: 'SERASA_NAO_CONFIGURADO', message: 'Serasa não configurada. Gere clientId/clientSecret no portal (client-identities) e defina os secrets SERASA_CLIENT_ID e SERASA_CLIENT_SECRET (ou SERASA_TOKEN como fallback).' }, 503);
+    return json({ ok: false, code: 'SERASA_NAO_CONFIGURADO', message: 'Serasa não configurada. A credencial client-identities (clientId/clientSecret) é emitida pela Serasa Experian: solicite ao seu representante comercial ou na Central de Atendimento (11) 3003-7372 — a documentação pública fica em developer.serasaexperian.com.br. Com o par em mãos, defina os secrets SERASA_CLIENT_ID e SERASA_CLIENT_SECRET.' }, 503);
   }
   if (!(await rateLimit(env, getIp(request), 'serasa'))) return err('Limite de consultas atingido.', 429, 'RATE_LIMIT');
 
@@ -1580,7 +1580,7 @@ export async function handleSoa(env, request) {
     return json({
       ok: false,
       code: 'SOA_NAO_CONFIGURADO',
-      message: 'Consultas de risco ainda não liberadas: defina os secrets SOA_EMAIL e SOA_SENHA da conta do distribuidor (crie em soawebservices.com.br) e, para testar primeiro, SOA_AMBIENTE=homolog.',
+      message: 'Consultas de risco ainda não liberadas: crie a conta do distribuidor em soawebservices.com.br/criar-conta (Central (11) 4560-7722), contrate os produtos e defina os secrets SOA_EMAIL e SOA_SENHA. Para testar primeiro, SOA_AMBIENTE=homolog.',
       ambiente: soaAmbiente(env),
       endpointBase: soaBase(env),
     }, 503);
